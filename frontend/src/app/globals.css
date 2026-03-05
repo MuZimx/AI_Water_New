@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 200 20% 95%; /* #F0F3F4 */
+    --foreground: 200 50% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 200 50% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 50% 10%;
+    --primary: 200 43% 40%; /* #297AA3 */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 165 67% 62%; /* #3CDBAC */
+    --secondary-foreground: 200 50% 10%;
+    --muted: 200 10% 90%;
+    --muted-foreground: 200 20% 40%;
+    --accent: 165 67% 62%;
+    --accent-foreground: 200 50% 10%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 200 20% 85%;
+    --input: 200 20% 85%;
+    --ring: 200 43% 40%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline tracking-tight;
+  }
+}
+
+.glass-panel {
+  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-lg;
+}
+
+.status-processing {
+  @apply animate-pulse text-primary;
+}
+
+.risk-high { @apply text-red-600 bg-red-50 border-red-200; }
+.risk-mid { @apply text-amber-600 bg-amber-50 border-amber-200; }
+.risk-low { @apply text-emerald-600 bg-emerald-50 border-emerald-200; }
+.risk-none { @apply text-slate-500 bg-slate-50 border-slate-200; }
