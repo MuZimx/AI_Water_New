@@ -45,13 +45,24 @@ cd backend
 npm install
 ```
 
-3. **安装前端依赖**
+3. **安装 Python 依赖**（AI 模型必需）
+```bash
+cd backend/py
+
+# 安装所有依赖
+pip install -r requirements.txt
+
+# 或手动安装核心依赖
+pip install macls torch torchaudio
+```
+
+4. **安装前端依赖**
 ```bash
 cd ../frontend
 npm install
 ```
 
-4. **配置后端**
+5. **配置后端**
 ```bash
 cd ../backend
 ```
@@ -100,8 +111,19 @@ npm run dev
 
 ### AI 模型
 - **深度学习框架**: PyTorch
+- **音频分类**: macls (PaddlePaddle Audio Classification)
 - **模型架构**: ResNet-SE (Squeeze-and-Excitation)
-- **音频处理**: torchaudio
+- **音频处理**: torchaudio, librosa
+
+**重要提示**：AI 模型需要安装 Python 依赖：
+```bash
+cd backend/py
+pip install -r requirements.txt
+```
+或手动安装核心依赖：
+```bash
+pip install macls torch torchaudio
+```
 
 ## 项目结构
 

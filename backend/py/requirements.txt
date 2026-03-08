@@ -1,0 +1,6 @@
+paddlepaddle
+paddlespeech
+macls
+torch
+torchaudio
+numpy

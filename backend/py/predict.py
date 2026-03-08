@@ -1,47 +1,46 @@
 import sys
 import json
 import os
-
-def simple_audio_analysis(file_path):
-    """
-    简单的音频分析函数
-    基于音频文件大小和名称进行简单的风险判断
-    """
-    # 使用文件大小和名称生成确定性的随机结果
-    file_size = os.path.getsize(file_path)
-    file_name = os.path.basename(file_path)
-
-    # 生成一个基于文件特征的伪随机值
-    seed = hash(file_name + str(file_size)) % 1000
-
-    # 模拟置信度 (0.7 - 0.99)
-    confidence = 0.7 + (seed % 300) / 1000.0
-
-    # 模拟风险等级
-    if seed % 10 < 2:  # 20% 高风险
-        result = "高风险"
-    elif seed % 10 < 5:  # 30% 低风险
-        result = "低风险"
-    else:  # 50% 无风险
-        result = "无风险"
-
-    return result, confidence
+import argparse
+import functools
+from macls.predict import MAClsPredictor
+from macls.utils.utils import add_arguments, print_arguments
 
 def main():
     # 获取参数
     file_path = sys.argv[1]
     dir_path = sys.argv[2]
+    model_path = dir_path+"/model/"
+    
+    parser = argparse.ArgumentParser(description="智慧水务音频识别")
+    add_arg = functools.partial(add_arguments, argparser=parser)
+    add_arg('configs', str, dir_path+'/config/resnet_se.yml', '配置文件')
+    add_arg('use_gpu', bool, False, '是否使用GPU预测')
+    add_arg('overwrites', str, 'dataset_conf.label_list_path='+dir_path+'/dataset/label_list.txt', '覆盖写入的配置文件参数')
+    add_arg('model_path', str, model_path, '导出的预测模型文件路径')
+    args = parser.parse_args(args=[]) 
 
-    # 使用简单的音频分析
-    result, score = simple_audio_analysis(file_path)
+    predictor = MAClsPredictor(
+        configs=args.configs,
+        model_path=args.model_path,
+        use_gpu=args.use_gpu,
+        overwrites=args.overwrites,
+        log_level="error"
+    )
+    result, score = predictor.predict(file_path)
+    if result == "2":
+        result = "高风险"
+    elif result == "1":
+        result = "无风险"
+    else:
+        result = "低风险"
 
-    # 输出结果
     result_j = {
         "risk_level": result,
         "confidence": score
     }
-
+    
+    # 输出结果
     print(json.dumps(result_j))
 
-if __name__ == '__main__':
-    main()
+main()
