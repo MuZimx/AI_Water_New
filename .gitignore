@@ -45,6 +45,11 @@ __pycache__/
 venv/
 .venv/
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
 # Audio files
 backend/uploads/*.mp3
 backend/uploads/*.wav
