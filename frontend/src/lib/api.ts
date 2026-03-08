@@ -73,11 +73,11 @@ async function request<T>(
       headers: defaultHeaders,
     });
 
-    const data = await response.json().catch(() => null);
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       throw new ApiError(
-        data?.message || `请求失败: ${response.status}`,
+        (data as any)?.message || `请求失败: ${response.status}`,
         response.status,
         data
       );
