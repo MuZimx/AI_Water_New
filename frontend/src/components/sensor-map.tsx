@@ -90,7 +90,7 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
             maxBounds: [[31.8, 118.5], [32.3, 119.0]], // 南京市边界
             maxBoundsViscosity: 1.0, // 限制拖拽出边界
             minZoom: 10,
-            maxZoom: 14
+            maxZoom: 18
           });
           L.tileLayer(offlineTemplate, {
             attribution: '&copy; OpenStreetMap contributors'
@@ -148,7 +148,7 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
               zoom: 10,
               maxBounds: [[118.5, 31.8], [119.0, 32.3]], // 南京市边界 [lng, lat]
               minZoom: 10,
-              maxZoom: 14
+              maxZoom: 18
             });
           }
 
@@ -199,7 +199,7 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
           maxBounds: [[31.8, 118.5], [32.3, 119.0]], // 南京市边界
           maxBoundsViscosity: 1.0, // 限制拖拽出边界
           minZoom: 10,
-          maxZoom: 14
+          maxZoom: 18
         });
 
         // 使用 OpenStreetMap 在线瓦片
