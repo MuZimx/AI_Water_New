@@ -82,8 +82,8 @@ export default function ProfilePage() {
                     <div className="h-20 w-20 rounded-full bg-white/20 border-2 border-white/40 flex items-center justify-center text-white text-3xl font-bold shadow-inner mb-3">
                       {user?.username.charAt(0).toUpperCase()}
                     </div>
-                    <p className="text-lg font-bold">{user?.username}</p>
-                    <p className="text-xs font-medium text-white/50 tracking-widest uppercase mt-1">身份：首席操作员</p>
+                    <p className="text-lg font-bold">{user?.full_name || user?.username}</p>
+                    <p className="text-xs font-medium text-white/50 tracking-widest uppercase mt-1">身份：{(user?.role === '管理员' && '系统管理员') || (user?.role === '工人' && '现场工人') || (user?.role ?? '未指定')}</p>
                   </div>
                   <div className="pt-4 border-t border-white/10 space-y-3">
                     <div className="flex items-center justify-between text-xs">

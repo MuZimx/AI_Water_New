@@ -51,6 +51,9 @@ import { AIInterpretationTool } from '@/components/ai-interpretation-tool';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import dynamic from 'next/dynamic';
+
+const SensorMap = dynamic(() => import('@/components/sensor-map'), { ssr: false });
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -70,8 +73,8 @@ export default function DashboardPage() {
           router.push('/');
           return;
         }
-        setCurrentUser(user);
-        loadFiles();
+  setCurrentUser(user);
+  loadFiles();
       } catch {
         router.push('/');
       }
@@ -81,6 +84,22 @@ export default function DashboardPage() {
     const interval = setInterval(loadFiles, 5000); // 5秒轮询一次
     return () => clearInterval(interval);
   }, [router]);
+
+  // load sensors on mount
+  useEffect(() => {
+    loadSensors();
+  }, []);
+
+  const [sensors, setSensors] = useState<any[]>([]);
+  const loadSensors = async () => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}/api/sensors`);
+      const data = await res.json();
+      if (data && data.success) setSensors(data.data || []);
+    } catch (e) {
+      console.error('加载传感器失败', e);
+    }
+  };
 
   const loadFiles = async () => {
     try {
@@ -208,6 +227,18 @@ export default function DashboardPage() {
       </header>
 
       <main className="container mx-auto p-4 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
+        {/* 地图卡片（左上） */}
+        <div className="lg:col-span-12">
+          <Card>
+            <CardHeader>
+              <CardTitle>地图总览</CardTitle>
+              <CardDescription>显示城市中传感器位置信息与最新状态</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SensorMap sensors={sensors} />
+            </CardContent>
+          </Card>
+        </div>
         {/* 左侧：列表 */}
         <div className="lg:col-span-8 space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

@@ -20,6 +20,9 @@ export interface AudioFile {
 export interface User {
   id: number;
   username: string;
+  role?: '工人' | '管理员' | string;
+  full_name?: string | null;
+  phone?: string | null;
 }
 
 export interface LoginRequest {
@@ -30,6 +33,14 @@ export interface LoginRequest {
 export interface InitAdminRequest {
   username: string;
   password: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  password: string;
+  full_name?: string;
+  phone?: string;
+  role: '工人' | '管理员';
 }
 
 export interface UploadResponse {
@@ -61,8 +72,11 @@ async function request<T>(
     ...options.headers,
   };
 
-  // 如果有 token，添加认证头
-  const token = localStorage.getItem('auth_token');
+  // 如果有 token（仅在浏览器环境），添加认证头
+  let token: string | null = null;
+  if (typeof window !== 'undefined' && window.localStorage) {
+    token = localStorage.getItem('auth_token');
+  }
   if (token) {
     (defaultHeaders as any)['Authorization'] = `Bearer ${token}`;
   }
@@ -73,17 +87,24 @@ async function request<T>(
       headers: defaultHeaders,
     });
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      throw new ApiError(
-        (data as any)?.message || `请求失败: ${response.status}`,
-        response.status,
-        data
-      );
+    // 更稳健地处理返回：优先解析 JSON，否则读取为文本（可能是空或 HTML 错误页）
+    let data: any = null;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await response.json().catch(() => null);
+    } else {
+      // 可能是空响应（204）或 HTML 错误页，读取为文本以便调试
+      const text = await response.text().catch(() => '');
+      data = text ? { message: text, raw: text } : null;
     }
 
-    return data as T;
+    if (!response.ok) {
+      const fallbackMsg = response.statusText || `请求失败: ${response.status}`;
+      const message = (data as any)?.message || fallbackMsg;
+      throw new ApiError(message, response.status, data ?? { statusText: response.statusText });
+    }
+
+    return (data ?? {}) as T;
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
@@ -122,6 +143,25 @@ export const API = {
       };
     }
     throw new Error('登录失败');
+  },
+
+  // 注册（前端调用：允许选择角色 工人/管理员）
+  register: async (payload: RegisterRequest): Promise<{ user: User; token?: string }> => {
+    // 假设后端开放 /register 或 /users/register 路径处理公开注册
+    const endpoint = '/register';
+    const response = await request<{ success: boolean; data: { user: User; accessToken?: string } }>(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    if (response.success && response.data) {
+      // 若后端返回 token，则保存
+      if (response.data.accessToken) {
+        localStorage.setItem('auth_token', response.data.accessToken);
+      }
+      return { user: response.data.user, token: response.data.accessToken };
+    }
+    throw new Error('注册失败');
   },
 
   logout: async (): Promise<void> => {

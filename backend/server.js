@@ -86,6 +86,14 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use('/uploads', express.static('uploads')); // 提供静态文件访问
 
+// 提供离线瓦片静态目录（如果存在）
+const tilesDir = path.join(__dirname, 'public', 'tiles');
+if (!fs.existsSync(tilesDir)) {
+  // 不强制创建，方便用户先生成瓦片后再启用；如果需要可以取消注释下一行自动创建目录
+  // fs.mkdirSync(tilesDir, { recursive: true });
+}
+app.use('/tiles', express.static(tilesDir));
+
 // 初始化 SQLite 数据库
 const db = new sqlite3.Database(path.join(__dirname, 'db/users.db'), (err) => {
   if (err) {
@@ -100,8 +108,29 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
+  role TEXT DEFAULT '工人',
+  full_name TEXT,
+  phone TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
+
+// 若老数据库缺少新列，尝试添加（兼容线上已有数据）
+const tryAddColumn = (table, columnDef) => {
+  const [columnName] = columnDef.trim().split(' ');
+  const checkSql = `PRAGMA table_info(${table})`;
+  db.all(checkSql, [], (err, rows) => {
+    if (err) return;
+    const exists = rows.some(r => r.name === columnName);
+    if (!exists) {
+      const alterSql = `ALTER TABLE ${table} ADD COLUMN ${columnDef}`;
+      db.run(alterSql, (e) => {});
+    }
+  });
+};
+
+tryAddColumn('users', "role TEXT DEFAULT '工人'");
+tryAddColumn('users', 'full_name TEXT');
+tryAddColumn('users', 'phone TEXT');
 
 // 创建音频文件表
 db.run(`CREATE TABLE IF NOT EXISTS audio_files (
@@ -181,8 +210,8 @@ app.post('/api/init-admin', async (req, res) => {
       const hashedPassword = await bcrypt.hash(password, 10);
 
       // 插入管理员用户
-      const insertQuery = `INSERT INTO users (username, password) VALUES (?, ?)`;
-      db.run(insertQuery, [username, hashedPassword], function (err) {
+          const insertQuery = `INSERT INTO users (username, password, role) VALUES (?, ?, ?)`;
+          db.run(insertQuery, [username, hashedPassword, '管理员'], function (err) {
         if (err) {
           return res.status(500).json({
             success: false,
@@ -246,6 +275,7 @@ app.post('/api/login', (req, res) => {
       const accessToken = generateAccessToken({
         id: user.id,
         username: user.username
+        , role: user.role || '工人'
       });
       
       const refreshToken = generateRefreshToken({
@@ -272,7 +302,12 @@ app.post('/api/login', (req, res) => {
 
 // 获取用户列表接口 - 需要认证
 app.get('/api/users', authenticateToken, (req, res) => {
-  const query = `SELECT id, username, created_at FROM users ORDER BY id`;
+  // 仅允许管理员查看所有用户列表
+  if (!req.user || req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const query = `SELECT id, username, role, full_name, phone, created_at FROM users ORDER BY id`;
   db.all(query, [], (err, rows) => {
     if (err) {
       return res.status(500).json({
@@ -292,7 +327,7 @@ app.get('/api/users', authenticateToken, (req, res) => {
 // 获取当前用户信息接口 - 需要认证
 app.get('/api/users/profile', authenticateToken, (req, res) => {
   const userId = req.user.id;
-  const query = `SELECT id, username, created_at FROM users WHERE id = ?`;
+  const query = `SELECT id, username, role, full_name, phone, created_at FROM users WHERE id = ?`;
   
   db.get(query, [userId], (err, row) => {
     if (err) {
@@ -312,6 +347,40 @@ app.get('/api/users/profile', authenticateToken, (req, res) => {
     res.json({
       success: true,
       data: row
+    });
+  });
+});
+
+// 删除用户接口 - 仅管理员可删除，且只能删除角色为 工人 的用户
+app.delete('/api/users/:id', authenticateToken, (req, res) => {
+  // 验证管理员权限
+  if (!req.user || req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const targetId = parseInt(req.params.id, 10);
+  if (isNaN(targetId)) {
+    return res.status(400).json({ success: false, message: '无效的用户ID' });
+  }
+
+  // 管理员不能删除自己
+  if (req.user.id === targetId) {
+    return res.status(400).json({ success: false, message: '无法删除自身账户' });
+  }
+
+  const getSql = `SELECT id, role FROM users WHERE id = ?`;
+  db.get(getSql, [targetId], (err, row) => {
+    if (err) return res.status(500).json({ success: false, message: '服务器内部错误' });
+    if (!row) return res.status(404).json({ success: false, message: '用户不存在' });
+
+    if (row.role !== '工人') {
+      return res.status(403).json({ success: false, message: '只能删除工人用户' });
+    }
+
+    const delSql = `DELETE FROM users WHERE id = ?`;
+    db.run(delSql, [targetId], function(err) {
+      if (err) return res.status(500).json({ success: false, message: '删除失败' });
+      return res.json({ success: true, message: '删除成功' });
     });
   });
 });
@@ -677,6 +746,18 @@ app.get('/api/test', authenticateToken, (req, res) => {
   });
 });
 
+// 简单的传感器列表接口（供前端地图使用）
+app.get('/api/sensors', (req, res) => {
+  // 示例数据；后续可替换为数据库查询
+  const sensors = [
+    { id: 1, name: '传感器-玄武区-001', latitude: 32.06, longitude: 118.78, status: '正常', last_audio_time: null },
+    { id: 2, name: '传感器-秦淮区-002', latitude: 32.02, longitude: 118.79, status: '轻微漏水', last_audio_time: '2026-03-09T09:12:00Z' },
+    { id: 3, name: '传感器-鼓楼区-003', latitude: 32.07, longitude: 118.77, status: '严重漏水', last_audio_time: '2026-03-09T08:45:00Z' }
+  ];
+
+  res.json({ success: true, data: sensors });
+});
+
 // 错误处理中间件
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
@@ -705,4 +786,57 @@ app.use((error, req, res, next) => {
 // 启动服务器
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`后端服务器正在运行，端口: ${PORT}`);
+});
+
+// 公开注册接口（允许前端注册，支持选择角色）
+app.post('/api/register', async (req, res) => {
+  // 公开注册允许选择角色（'工人' 或 '管理员'）——注意：如要在生产中限制管理员创建，请调整策略
+  const { username, password, full_name, phone, role } = req.body;
+
+  if (!username || !password || !role) {
+    return res.status(400).json({ success: false, message: '用户名、密码和角色为必填项' });
+  }
+
+  if (!['工人', '管理员'].includes(role)) {
+    return res.status(400).json({ success: false, message: "非法角色，必须为 '工人' 或 '管理员'" });
+  }
+
+  const checkSql = `SELECT id FROM users WHERE username = ?`;
+  db.get(checkSql, [username], async (err, row) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (row) {
+      return res.status(409).json({ success: false, message: '用户名已存在' });
+    }
+
+    try {
+      const hashed = await bcrypt.hash(password, 10);
+      const insertSql = `INSERT INTO users (username, password, role, full_name, phone) VALUES (?, ?, ?, ?, ?)`;
+      db.run(insertSql, [username, hashed, role, full_name || null, phone || null], function(err) {
+        if (err) {
+          return res.status(500).json({ success: false, message: '创建用户失败' });
+        }
+
+        const userId = this.lastID;
+
+        // 生成 token 并返回（注册后可选自动登录）
+        const accessToken = generateAccessToken({ id: userId, username, role });
+        const refreshToken = generateRefreshToken({ id: userId, username, role });
+
+        return res.status(201).json({
+          success: true,
+          message: '注册成功',
+          data: {
+            user: { id: userId, username, role, full_name: full_name || null, phone: phone || null },
+            accessToken,
+            refreshToken
+          }
+        });
+      });
+    } catch (e) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+  });
 });

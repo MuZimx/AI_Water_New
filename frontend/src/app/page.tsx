@@ -154,6 +154,9 @@ export default function LoginPage() {
             </CardFooter>
           </form>
         </Card>
+        <div className="flex items-center justify-center mt-4">
+          <a href="/register" className="text-sm text-primary hover:underline">没有账号？注册</a>
+        </div>
 
         <div className="grid grid-cols-3 gap-4">
           {[
