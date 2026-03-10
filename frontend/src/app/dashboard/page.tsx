@@ -21,7 +21,8 @@ import {
   Activity,
   CheckSquare,
   MapPin,
-  Send
+  Send,
+  RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,6 +80,8 @@ export default function DashboardPage() {
   const [fromBannerMode, setFromBannerMode] = useState(false);
   const [sensorDetailsOpen, setSensorDetailsOpen] = useState(false);
   const [selectedSensorId, setSelectedSensorId] = useState<number | null>(null);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -145,28 +148,26 @@ export default function DashboardPage() {
     }
   }, [currentUser, workerStatus]);
 
-  // 监听弹窗内按钮点击
+  // 注册全局函数供地图弹窗调用
   useEffect(() => {
-    const handlePopupButtonClick = (e: Event) => {
-      const target = e.target as HTMLElement;
-      if (target.classList.contains('assign-worker-btn')) {
-        const sensorId = target.getAttribute('data-sensor-id');
-        const sensor = sensors.find(s => s.id === parseInt(sensorId || ''));
+    if (typeof window !== 'undefined') {
+      (window as any).triggerAssignWorker = (sensorId: number) => {
+        const sensor = sensors.find(s => s.id === sensorId);
         if (sensor && currentUser?.role === '管理员') {
           setSelectedSensor(sensor);
           setSelectedWorkers([]);
           setDeadline('');
           setAssignDialogOpen(true);
         }
-      }
-    };
+      };
 
-    // 添加全局事件监听
-    document.addEventListener('click', handlePopupButtonClick);
-
-    return () => {
-      document.removeEventListener('click', handlePopupButtonClick);
-    };
+      // 清理函数
+      return () => {
+        if (typeof window !== 'undefined') {
+          delete (window as any).triggerAssignWorker;
+        }
+      };
+    }
   }, [sensors, currentUser]);
 
   const loadSensors = async () => {
@@ -302,6 +303,25 @@ export default function DashboardPage() {
     );
   };
 
+  const handleResetMaintenance = async () => {
+    setIsResetting(true);
+    try {
+      await API.resetMaintenance();
+      toast({ title: "重置成功", description: "所有维修记录已删除，工人状态已恢复" });
+      setResetDialogOpen(false);
+      // 刷新数据
+      loadSensors();
+      loadWorkers();
+      if (currentUser?.role === '工人') {
+        API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "重置失败", description: error.message || "请稍后重试" });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const filteredFiles = files.filter(f => {
     const matchesSearch = f.original_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTab = activeTab === 'all' ||
@@ -337,13 +357,22 @@ export default function DashboardPage() {
                   </div>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-56 z-[10000]">
                 <DropdownMenuLabel>账户设置</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => router.push('/profile')}>
                   <Settings className="mr-2 h-4 w-4" />
                   安全令牌管理
                 </DropdownMenuItem>
+                {currentUser?.role === '管理员' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setResetDialogOpen(true)} className="text-orange-600 focus:bg-orange-50">
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      重置维修记录
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:bg-destructive/10">
                   <LogOut className="mr-2 h-4 w-4" />
@@ -371,16 +400,17 @@ export default function DashboardPage() {
               <Button
                 type="button"
                 onClick={(e) => {
-                  console.log('横幅按钮被点击');
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('切换前 activeTab:', activeTab);
+                  console.log('横幅按钮被点击，当前 activeTab:', activeTab);
                   setActiveTab('tasks');
                   setFromBannerMode(true);
-                  console.log('已设置fromBannerMode');
-                  // 延迟检查状态
+                  // 强制滚动到任务区域
                   setTimeout(() => {
-                    console.log('切换后 activeTab (延迟检查):', activeTab);
+                    const tasksSection = document.getElementById('tasks-section');
+                    if (tasksSection) {
+                      tasksSection.scrollIntoView({ behavior: 'smooth' });
+                    }
                   }, 100);
                 }}
                 variant="secondary"
@@ -738,7 +768,7 @@ export default function DashboardPage() {
             </TabsContent>
 
             {currentUser?.role === '工人' && (
-              <TabsContent value="tasks" className="mt-6 space-y-4">
+              <TabsContent value="tasks" className="mt-6 space-y-4" id="tasks-section">
                 <>
                   {fromBannerMode && (
                     <div className="mb-4">
@@ -757,6 +787,7 @@ export default function DashboardPage() {
                       // 刷新工人状态
                       API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
                     }}
+                    onRefreshSensors={loadSensors}
                     fromBanner={fromBannerMode}
                   />
                 </>
@@ -940,6 +971,53 @@ export default function DashboardPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* 重置维修记录确认对话框 */}
+      <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+        <DialogContent className="sm:max-w-md z-[10000]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <div className="bg-orange-100 p-2 rounded-full">
+                <RotateCcw className="h-6 w-6 text-orange-600" />
+              </div>
+              重置维修记录
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+              <p className="text-orange-900 font-medium mb-2">
+                ⚠️ 此操作不可撤销
+              </p>
+              <p className="text-orange-700 text-sm">
+                确定要删除所有维修记录吗？此操作将：
+              </p>
+              <ul className="text-orange-700 text-sm mt-2 space-y-1 list-disc list-inside">
+                <li>删除所有派工指令和维修反馈</li>
+                <li>将所有工人状态重置为"空闲"</li>
+                <li>传感器状态保持不变，只清除维修记录</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 !flex-row !justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetDialogOpen(false)}
+              disabled={isResetting}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              onClick={handleResetMaintenance}
+              disabled={isResetting}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {isResetting ? '重置中...' : '确认重置'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 传感器详情对话框 */}
       <SensorDetailsDialog

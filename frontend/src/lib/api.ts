@@ -315,4 +315,15 @@ export const API = {
       method: 'PUT',
     });
   },
+
+  // 重置所有维修记录（管理员）
+  resetMaintenance: async (): Promise<{ message: string }> => {
+    const response = await request<{ success: boolean; message: string }>('/commands/reset', {
+      method: 'DELETE',
+    });
+    if (response.success) {
+      return { message: response.message };
+    }
+    throw new Error('重置失败');
+  },
 };

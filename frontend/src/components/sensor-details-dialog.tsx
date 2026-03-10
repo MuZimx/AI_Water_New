@@ -88,7 +88,7 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-hidden flex flex-col z-[10000]">
           <DialogHeader>
             <DialogTitle className="text-xl">传感器维修详情</DialogTitle>
           </DialogHeader>

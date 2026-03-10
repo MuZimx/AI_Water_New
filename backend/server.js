@@ -108,6 +108,25 @@ const db = new sqlite3.Database(path.join(__dirname, 'db/users.db'), (err) => {
     console.error('无法连接到 SQLite 数据库:', err.message);
   } else {
     console.log('已连接到 SQLite 数据库');
+    
+    // 初始化传感器数据（如果为空）
+    db.get('SELECT COUNT(*) as count FROM sensors', [], (err, row) => {
+      if (!err && row.count === 0) {
+        console.log('初始化默认传感器数据...');
+        const defaultSensors = [
+          { id: 1, name: '传感器-玄武区-001', latitude: 32.06, longitude: 118.78, status: '正常' },
+          { id: 2, name: '传感器-秦淮区-002', latitude: 32.02, longitude: 118.79, status: '轻微漏水' },
+          { id: 3, name: '传感器-鼓楼区-003', latitude: 32.07, longitude: 118.77, status: '严重漏水' }
+        ];
+        
+        const stmt = db.prepare('INSERT INTO sensors (id, name, latitude, longitude, status) VALUES (?, ?, ?, ?, ?)');
+        defaultSensors.forEach(sensor => {
+          stmt.run(sensor.id, sensor.name, sensor.latitude, sensor.longitude, sensor.status);
+        });
+        stmt.finalize();
+        console.log('已插入默认传感器数据');
+      }
+    });
   }
 });
 
@@ -666,13 +685,14 @@ function processAudioFile(file,id) {
         // 更新数据库中的预测结果
         const updateQuery = `
           UPDATE audio_files
-          SET risk_level = ?, confidence = ?
+          SET risk_level = ?, confidence = ?, detect_time = ?
           WHERE id = ?
         `;
 
         db.run(updateQuery, [
           prediction.risk_level,
           prediction.confidence,
+          new Date().toISOString(),
           audioFile.id
         ], function(err) {
           if (err) {
@@ -683,6 +703,25 @@ function processAudioFile(file,id) {
             });
             console.error('更新数据库失败:', err);
             return reject(err);
+          }
+
+          // 如果检测到漏水，更新传感器状态
+          if (prediction.risk_level === '轻微漏水' || prediction.risk_level === '严重漏水') {
+            // 首先获取这个音频文件对应的传感器ID
+            db.get('SELECT sensor_id FROM audio_files WHERE id = ?', [audioFile.id], (err, row) => {
+              if (!err && row && row.sensor_id) {
+                const newStatus = prediction.risk_level === '严重漏水' ? '严重漏水' : '轻微漏水';
+                db.run('UPDATE sensors SET status = ?, last_audio_time = ? WHERE id = ?',
+                  [newStatus, new Date().toISOString(), row.sensor_id],
+                  (err) => {
+                    if (err) {
+                      console.error('更新传感器状态失败:', err.message);
+                    } else {
+                      console.log(`传感器 ${row.sensor_id} 状态已更新为 ${newStatus}`);
+                    }
+                  });
+              }
+            });
           }
 
           // 更新处理状态为完成
@@ -728,12 +767,13 @@ app.post('/api/upload-audio', authenticateToken, upload.single('audio'), (req, r
   }
 
   const userId = req.user && req.user.id ? req.user.id : null;
+  const sensorId = req.body.sensor_id;
   const filePath = req.file.path;
 
   // 保存文件信息到数据库
   const insertQuery = `INSERT INTO audio_files 
-    (filename, original_name, mimetype, size, user_id, risk_level, confidence) 
-    VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    (filename, original_name, mimetype, size, user_id, sensor_id, risk_level, confidence) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
   const params = [
     req.file.filename,
@@ -741,6 +781,7 @@ app.post('/api/upload-audio', authenticateToken, upload.single('audio'), (req, r
     req.file.mimetype || 'audio',
     req.file.size || 0,
     userId,
+    sensorId || null,
     '未检测',
     0.0
   ];
@@ -783,24 +824,69 @@ app.get('/api/test', authenticateToken, (req, res) => {
 });
 
 // 简单的传感器列表接口（供前端地图使用）
-app.get('/api/sensors', (req, res) => {
-  // 示例数据；后续可替换为数据库查询
-  const sensors = [
-    { id: 1, name: '传感器-玄武区-001', latitude: 32.06, longitude: 118.78, status: '正常', last_audio_time: null },
-    { id: 2, name: '传感器-秦淮区-002', latitude: 32.02, longitude: 118.79, status: '轻微漏水', last_audio_time: '2026-03-09T09:12:00Z' },
-    { id: 3, name: '传感器-鼓楼区-003', latitude: 32.07, longitude: 118.77, status: '严重漏水', last_audio_time: '2026-03-09T08:45:00Z' }
-  ];
-
-  // 查询哪些传感器有未完成的指令
-  const query = `SELECT DISTINCT sensor_id FROM commands WHERE sensor_id IS NOT NULL AND status IN ('已发布', '进行中')`;
-  db.all(query, [], (err, rows) => {
-    if (!err && rows) {
-      const assignedSensorIds = new Set(rows.map(r => r.sensor_id));
-      sensors.forEach(sensor => {
-        sensor.assigned = assignedSensorIds.has(sensor.id);
-      });
+// 获取单个传感器详情
+app.get('/api/sensors/:id', (req, res) => {
+  const { id } = req.params;
+  
+  db.get(`SELECT id, name, latitude, longitude, status, last_audio_time FROM sensors WHERE id = ?`, [id], (err, sensor) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '查询传感器失败' });
     }
-    res.json({ success: true, data: sensors });
+    if (!sensor) {
+      return res.status(404).json({ success: false, message: '传感器不存在' });
+    }
+    res.json({ success: true, data: sensor });
+  });
+});
+
+app.get('/api/sensors', (req, res) => {
+  // 从数据库查询传感器数据
+  const query = `SELECT id, name, latitude, longitude, status, last_audio_time FROM sensors`;
+  db.all(query, [], (err, sensors) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '查询传感器失败' });
+    }
+
+    // 查询哪些传感器有未完成的指令
+    const assignedQuery = `SELECT DISTINCT sensor_id FROM command_recipients cr 
+                          JOIN commands c ON cr.command_id = c.id 
+                          WHERE c.sensor_id IS NOT NULL AND c.status IN ('已发布', '进行中')`;
+    db.all(assignedQuery, [], (err, rows) => {
+      if (!err && rows) {
+        const assignedSensorIds = new Set(rows.map(r => r.sensor_id));
+        sensors.forEach(sensor => {
+          sensor.assigned = assignedSensorIds.has(sensor.id);
+        });
+      }
+      res.json({ success: true, data: sensors });
+    });
+  });
+});
+
+// 更新传感器状态接口
+app.put('/api/sensors/:id/status', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  // 验证管理员权限
+  if (req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  // 验证状态值
+  const validStatuses = ['正常', '轻微漏水', '严重漏水', '传感器损坏'];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ success: false, message: '无效的状态值' });
+  }
+
+  db.run(`UPDATE sensors SET status = ? WHERE id = ?`, [status, id], function(err) {
+    if (err) {
+      return res.status(500).json({ success: false, message: '更新失败' });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ success: false, message: '传感器不存在' });
+    }
+    res.json({ success: true, message: '传感器状态已更新' });
   });
 });
 
@@ -1009,9 +1095,13 @@ app.post('/api/commands/:id/feedback', authenticateToken, imageUpload.array('pho
 
         // 如果请求要求更新传感器状态为"正常"
         if (update_sensor === 'true' && command.sensor_id) {
-          // 注意：这里需要更新传感器状态，但当前传感器数据是硬编码的
-          // 如果传感器数据存储在数据库中，需要添加相应的更新逻辑
-          console.log(`传感器 ${command.sensor_id} 状态将被更新为正常（当前为模拟数据）`);
+          db.run(`UPDATE sensors SET status = '正常' WHERE id = ?`, [command.sensor_id], (err) => {
+            if (err) {
+              console.error('更新传感器状态失败:', err.message);
+            } else {
+              console.log(`传感器 ${command.sensor_id} 状态已更新为正常`);
+            }
+          });
         }
 
         res.json({ success: true, message: '反馈提交成功', photos: photoUrls });
@@ -1033,6 +1123,36 @@ app.put('/api/commands/:id/complete', authenticateToken, (req, res) => {
       return res.status(500).json({ success: false, message: '更新失败' });
     }
     res.json({ success: true, message: '指令已标记为完成' });
+  });
+});
+
+// 管理员重置所有维修记录和传感器状态
+app.delete('/api/commands/reset', authenticateToken, (req, res) => {
+  if (req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION');
+
+    // 删除所有指令记录
+    db.run('DELETE FROM commands', function(err) {
+      if (err) {
+        db.run('ROLLBACK');
+        return res.status(500).json({ success: false, message: '删除指令记录失败' });
+      }
+
+      // 将所有工人状态重置为'空闲'
+      db.run('UPDATE users SET worker_status = ? WHERE role = ?', ['空闲', '工人'], function(err) {
+        if (err) {
+          db.run('ROLLBACK');
+          return res.status(500).json({ success: false, message: '重置工人状态失败' });
+        }
+
+        db.run('COMMIT');
+        res.json({ success: true, message: '维修记录已重置，工人状态已恢复初始状态' });
+      });
+    });
   });
 });
 

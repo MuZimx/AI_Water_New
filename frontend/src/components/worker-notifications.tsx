@@ -36,10 +36,11 @@ interface Command {
 interface WorkerNotificationsProps {
   currentUser: any;
   onStatusChange?: () => void;
+  onRefreshSensors?: () => void;
   fromBanner?: boolean;
 }
 
-export function WorkerNotifications({ currentUser, onStatusChange, fromBanner }: WorkerNotificationsProps) {
+export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSensors, fromBanner }: WorkerNotificationsProps) {
   const { toast } = useToast();
   const [commands, setCommands] = useState<Command[]>([]);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
@@ -70,7 +71,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, fromBanner }:
     if (!fromBanner && selectedCommand !== null) {
       setSelectedCommand(null);
     }
-  }, [fromBanner, commands, selectedCommand]);
+  }, [fromBanner, commands]); // 移除 selectedCommand 依赖避免无限循环
 
   const loadCommands = async () => {
     try {
@@ -132,9 +133,12 @@ export function WorkerNotifications({ currentUser, onStatusChange, fromBanner }:
       setUpdateSensor(false);
       loadCommands();
       setSelectedCommand(null);
-      // 通知父组件刷新工人状态
+      // 通知父组件刷新工人状态和传感器数据
       if (onStatusChange) {
         onStatusChange();
+      }
+      if (onRefreshSensors) {
+        onRefreshSensors();
       }
     } catch (error: any) {
       toast({ variant: "destructive", title: "提交失败", description: error.message });
@@ -167,6 +171,44 @@ export function WorkerNotifications({ currentUser, onStatusChange, fromBanner }:
           <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">维修指令</h2>
           <p className="text-xs text-muted-foreground">当前共有 {commands.length} 条待处理指令</p>
         </div>
+      )}
+
+      {/* 横幅模式下显示当前选中的指令详情 */}
+      {fromBanner && selectedCommand && (
+        <Card className="border-primary shadow-lg bg-primary/5">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center gap-2">
+                  {getStatusBadge(selectedCommand.status)}
+                </div>
+                <CardTitle className="text-lg">{selectedCommand.title}</CardTitle>
+                <CardDescription className="flex items-center gap-4 text-xs">
+                  <span>编号: {selectedCommand.command_number}</span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {format(new Date(selectedCommand.created_at), 'yyyy-MM-dd HH:mm')}
+                  </span>
+                  {selectedCommand.deadline && (
+                    <span className="flex items-center gap-1 text-amber-600">
+                      <Clock className="h-3 w-3" />
+                      截止: {format(new Date(selectedCommand.deadline), 'yyyy-MM-dd HH:mm')}
+                    </span>
+                  )}
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">{selectedCommand.content}</p>
+            {selectedCommand.feedback && (
+              <div className="mt-3 p-3 bg-muted rounded-lg">
+                <p className="text-xs text-muted-foreground mb-1">已提交反馈:</p>
+                <p className="text-sm">{selectedCommand.feedback}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {!fromBanner && commands.length === 0 ? (
