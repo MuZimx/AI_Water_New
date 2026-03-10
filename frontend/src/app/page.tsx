@@ -112,7 +112,6 @@ export default function LoginPage() {
                 <div className="relative">
                   <Input
                     id="username"
-                    placeholder="例如：admin_operator"
                     className="pl-9 h-11"
                     required
                     value={username}
@@ -127,7 +126,6 @@ export default function LoginPage() {
                   <Input
                     id="password"
                     type="password"
-                    placeholder="••••••••"
                     className="pl-9 h-11"
                     required
                     value={password}
