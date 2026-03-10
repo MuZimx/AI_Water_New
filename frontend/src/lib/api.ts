@@ -1,6 +1,6 @@
 // 真实后端 API 客户端
 // 配置后端服务器地址
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api';
 
 export type RiskLevel = '高风险' | '中风险' | '低风险' | '未检测';
 
@@ -229,5 +229,113 @@ export const API = {
   getFileStatus: async (filename: string): Promise<any> => {
     const response = await request<{ success: boolean; data: any }>(`/audio-processing-status/${filename}`);
     return response.success ? response.data : null;
+  },
+
+  // 检修信息管理模块 API
+  createMaintenanceRecord: async (data: { title: string; content: string; sensors: Array<{ id: number; name: string }> }): Promise<{ id: number }> => {
+    const response = await request<{ success: boolean; data: { id: number } }>('/maintenance-records', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return response.data;
+  },
+
+  uploadMaintenancePhotos: async (id: number, photos: File[]): Promise<Array<{ filename: string; originalName: string }>> => {
+    const formData = new FormData();
+    photos.forEach((photo) => {
+      formData.append('photos', photo);
+    });
+    const response = await request<{ success: boolean; data: Array<{ filename: string; originalName: string }> }>(`/maintenance-records/${id}/photos`, {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
+    return response.data;
+  },
+
+  getMaintenanceRecords: async (params?: { page?: number; size?: number; status?: string; sensor_id?: number }): Promise<{ data: any[]; total: number }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.size) queryParams.append('size', params.size.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.sensor_id) queryParams.append('sensor_id', params.sensor_id.toString());
+    const response = await request<{ success: boolean; data: any[]; total: number }>(`/maintenance-records?${queryParams}`);
+    return { data: response.data, total: response.total };
+  },
+
+  getMaintenanceRecord: async (id: number): Promise<any> => {
+    const response = await request<{ success: boolean; data: any }>(`/maintenance-records/${id}`);
+    return response.data;
+  },
+
+  updateMaintenanceStatus: async (id: number, status: string): Promise<void> => {
+    await request<{ success: boolean }>(`/maintenance-records/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  // 信息反馈与命令指示系统 API
+  createCommand: async (data: { title: string; content: string; deadline?: string }): Promise<{ id: number }> => {
+    const response = await request<{ success: boolean; data: { id: number } }>('/commands', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return response.data;
+  },
+
+  uploadCommandAttachments: async (id: number, attachments: File[]): Promise<Array<{ filename: string; originalName: string }>> => {
+    const formData = new FormData();
+    attachments.forEach((attachment) => {
+      formData.append('attachments', attachment);
+    });
+    const response = await request<{ success: boolean; data: Array<{ filename: string; originalName: string }> }>(`/commands/${id}/attachments`, {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
+    return response.data;
+  },
+
+  getCommands: async (params?: { page?: number; size?: number; status?: string }): Promise<{ data: any[]; total: number }> => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.size) queryParams.append('size', params.size.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    const response = await request<{ success: boolean; data: any[]; total: number }>(`/commands?${queryParams}`);
+    return { data: response.data, total: response.total };
+  },
+
+  getCommand: async (id: number): Promise<any> => {
+    const response = await request<{ success: boolean; data: any }>(`/commands/${id}`);
+    return response.data;
+  },
+
+  updateCommandStatus: async (id: number, status: string): Promise<void> => {
+    await request<{ success: boolean }>(`/commands/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  submitCommandFeedback: async (id: number, content: string): Promise<{ id: number }> => {
+    const response = await request<{ success: boolean; data: { id: number } }>(`/commands/${id}/feedback`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+    return response.data;
+  },
+
+  uploadCommandFeedbackPhotos: async (id: number, photos: File[]): Promise<Array<{ filename: string; originalName: string }>> => {
+    const formData = new FormData();
+    photos.forEach((photo) => {
+      formData.append('photos', photo);
+    });
+    const response = await request<{ success: boolean; data: Array<{ filename: string; originalName: string }> }>(`/commands/${id}/feedback/photos`, {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
+    return response.data;
   },
 };
