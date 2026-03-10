@@ -59,3 +59,44 @@ backend/uploads/*.wav
 backend/uploads/*.flac
 backend/uploads/*.ogg
 backend/uploads/*.m4a
+
+# User data - Images
+backend/uploads/*.jpg
+backend/uploads/*.jpeg
+backend/uploads/*.png
+backend/uploads/*.gif
+backend/uploads/*.bmp
+backend/uploads/*.webp
+backend/uploads/*.svg
+backend/uploads/*.ico
+
+# User data - Videos
+backend/uploads/*.mp4
+backend/uploads/*.avi
+backend/uploads/*.mov
+backend/uploads/*.wmv
+backend/uploads/*.flv
+backend/uploads/*.mkv
+
+# User data - Documents
+backend/uploads/*.pdf
+backend/uploads/*.doc
+backend/uploads/*.docx
+backend/uploads/*.xls
+backend/uploads/*.xlsx
+backend/uploads/*.txt
+
+# User data - Archives
+backend/uploads/*.zip
+backend/uploads/*.rar
+backend/uploads/*.7z
+backend/uploads/*.tar
+backend/uploads/*.gz
+
+# Ignore entire uploads directory (recursive)
+backend/uploads/*/
+uploads/*/
+
+# Keep directory structure but ignore all files inside
+backend/uploads/**
+uploads/**
