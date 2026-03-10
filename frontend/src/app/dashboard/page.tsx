@@ -19,9 +19,8 @@ import {
   Home,
   Bell,
   Activity,
-  CheckSquare,
-  MapPin,
-  Send
+  Wrench,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -193,7 +192,7 @@ export default function DashboardPage() {
 
   const loadSensors = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}/api/sensors`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3001'}/api/sensors`);
       const data = await res.json();
       if (data && data.success) setSensors(data.data || []);
     } catch (e) {
@@ -345,6 +344,16 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2">
+              <Button variant="ghost" className="h-10 px-3" onClick={() => router.push('/maintenance')}>
+                <Wrench className="h-4 w-4 mr-2" />
+                <span>检修记录</span>
+              </Button>
+              <Button variant="ghost" className="h-10 px-3" onClick={() => router.push('/commands')}>
+                <MessageSquare className="h-4 w-4 mr-2" />
+                <span>命令管理</span>
+              </Button>
+            </div>
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-secondary/10 rounded-full border border-secondary/20 mr-2">
               <div className="h-2 w-2 rounded-full bg-secondary animate-pulse" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-secondary-foreground">监控中</span>

@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
@@ -42,12 +42,30 @@ const authenticateToken = (req, res, next) => {
 
 // 创建 Express 应用
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // 确保上传目录存在
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// 确保检修记录照片目录存在
+const maintenancePhotosDir = path.join(__dirname, 'uploads', 'maintenance');
+if (!fs.existsSync(maintenancePhotosDir)) {
+  fs.mkdirSync(maintenancePhotosDir, { recursive: true });
+}
+
+// 确保命令附件目录存在
+const commandAttachmentsDir = path.join(__dirname, 'uploads', 'commands');
+if (!fs.existsSync(commandAttachmentsDir)) {
+  fs.mkdirSync(commandAttachmentsDir, { recursive: true });
+}
+
+// 确保命令反馈照片目录存在
+const commandFeedbackPhotosDir = path.join(__dirname, 'uploads', 'command_feedback');
+if (!fs.existsSync(commandFeedbackPhotosDir)) {
+  fs.mkdirSync(commandFeedbackPhotosDir, { recursive: true });
 }
 
 // 配置 multer 中间件，只允许音频文件上传
@@ -80,11 +98,57 @@ const upload = multer({
   }
 });
 
-// 图片上传的multer配置（用于工人反馈照片）
-const imageUpload = multer({
-  storage: storage,
+// 配置检修记录照片上传
+const maintenancePhotosStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, maintenancePhotosDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'maintenance-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const maintenancePhotosUpload = multer({
+  storage: maintenancePhotosStorage,
   limits: {
-    fileSize: 10 * 1024 * 1024 // 限制文件大小为10MB
+    fileSize: 20 * 1024 * 1024 // 限制文件大小为20MB
+  }
+});
+
+// 配置命令附件上传
+const commandAttachmentsStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, commandAttachmentsDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'command-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const commandAttachmentsUpload = multer({
+  storage: commandAttachmentsStorage,
+  limits: {
+    fileSize: 30 * 1024 * 1024 // 限制文件大小为30MB
+  }
+});
+
+// 配置命令反馈照片上传
+const commandFeedbackPhotosStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, commandFeedbackPhotosDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'feedback-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const commandFeedbackPhotosUpload = multer({
+  storage: commandFeedbackPhotosStorage,
+  limits: {
+    fileSize: 20 * 1024 * 1024 // 限制文件大小为20MB
   }
 });
 
@@ -156,30 +220,89 @@ db.run(`CREATE TABLE IF NOT EXISTS audio_files (
   FOREIGN KEY (user_id) REFERENCES users (id)
 )`);
 
-// 创建指令表和接收者表
+// 创建检修记录表
+db.run(`CREATE TABLE IF NOT EXISTS maintenance_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  status TEXT DEFAULT '未读',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (id)
+)`);
+
+// 创建检修记录关联的传感器表
+db.run(`CREATE TABLE IF NOT EXISTS maintenance_sensors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  maintenance_id INTEGER NOT NULL,
+  sensor_id INTEGER NOT NULL,
+  sensor_name TEXT NOT NULL,
+  FOREIGN KEY (maintenance_id) REFERENCES maintenance_records (id)
+)`);
+
+// 创建检修记录照片表
+db.run(`CREATE TABLE IF NOT EXISTS maintenance_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  maintenance_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  upload_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (maintenance_id) REFERENCES maintenance_records (id)
+)`);
+
+// 创建命令指示表
 db.run(`CREATE TABLE IF NOT EXISTS commands (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  command_number TEXT UNIQUE NOT NULL,
   admin_id INTEGER NOT NULL,
   title TEXT NOT NULL,
   content TEXT NOT NULL,
-  sensor_id INTEGER,
   deadline DATETIME,
-  status TEXT CHECK(status IN ('草稿', '已发布', '进行中', '已完成', '已取消')) DEFAULT '已发布',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+  FOREIGN KEY (admin_id) REFERENCES users (id)
 )`);
 
+// 创建命令接收者表
 db.run(`CREATE TABLE IF NOT EXISTS command_recipients (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   command_id INTEGER NOT NULL,
-  worker_id INTEGER NOT NULL,
-  read_status INTEGER DEFAULT 0,
-  feedback TEXT,
-  feedback_photos TEXT,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (command_id) REFERENCES commands(id) ON DELETE CASCADE,
-  FOREIGN KEY (worker_id) REFERENCES users(id) ON DELETE CASCADE
+  user_id INTEGER NOT NULL,
+  status TEXT DEFAULT '未执行',
+  read_at DATETIME,
+  completed_at DATETIME,
+  FOREIGN KEY (command_id) REFERENCES commands (id),
+  FOREIGN KEY (user_id) REFERENCES users (id)
+)`);
+
+// 创建命令反馈表
+db.run(`CREATE TABLE IF NOT EXISTS command_feedbacks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  command_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (command_id) REFERENCES commands (id),
+  FOREIGN KEY (user_id) REFERENCES users (id)
+)`);
+
+// 创建命令反馈照片表
+db.run(`CREATE TABLE IF NOT EXISTS command_feedback_photos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  feedback_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  upload_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (feedback_id) REFERENCES command_feedbacks (id)
+)`);
+
+// 创建命令附件表
+db.run(`CREATE TABLE IF NOT EXISTS command_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  command_id INTEGER NOT NULL,
+  filename TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  upload_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (command_id) REFERENCES commands (id)
 )`);
 
 // 检查是否需要初始化数据库
@@ -1134,5 +1257,807 @@ app.post('/api/register', async (req, res) => {
     } catch (e) {
       return res.status(500).json({ success: false, message: '服务器内部错误' });
     }
+  });
+});
+
+// 检修信息管理模块 API
+
+// 创建检修记录
+app.post('/api/maintenance-records', authenticateToken, (req, res) => {
+  const { title, content, sensors } = req.body;
+  const userId = req.user.id;
+
+  // 仅标题和内容为必填项，传感器可以为空
+  if (!title || !content) {
+    return res.status(400).json({ success: false, message: '标题和内容为必填项' });
+  }
+
+  // 开始事务
+  db.run('BEGIN TRANSACTION', (err) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    // 插入检修记录
+    const insertRecordSql = `INSERT INTO maintenance_records (user_id, title, content) VALUES (?, ?, ?)`;
+    db.run(insertRecordSql, [userId, title, content], function(err) {
+      if (err) {
+        db.run('ROLLBACK');
+        return res.status(500).json({ success: false, message: '创建检修记录失败' });
+      }
+
+      const maintenanceId = this.lastID;
+
+      // 如果没有传感器，直接提交事务
+      if (!sensors || !Array.isArray(sensors) || sensors.length === 0) {
+        return db.run('COMMIT', (commitErr) => {
+          if (commitErr) {
+            return res.status(500).json({ success: false, message: '提交事务失败' });
+          }
+          return res.status(201).json({
+            success: true,
+            message: '检修记录创建成功',
+            data: { id: maintenanceId }
+          });
+        });
+      }
+
+      // 插入关联的传感器
+      const insertSensorSql = `INSERT INTO maintenance_sensors (maintenance_id, sensor_id, sensor_name) VALUES (?, ?, ?)`;
+      let sensorCount = 0;
+      let errorOccurred = false;
+
+      sensors.forEach((sensor) => {
+        db.run(insertSensorSql, [maintenanceId, sensor.id, sensor.name], (err) => {
+          sensorCount++;
+          if (err && !errorOccurred) {
+            errorOccurred = true;
+            db.run('ROLLBACK');
+            return res.status(500).json({ success: false, message: '关联传感器失败' });
+          }
+
+          if (sensorCount === sensors.length && !errorOccurred) {
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) {
+                return res.status(500).json({ success: false, message: '提交事务失败' });
+              }
+              return res.status(201).json({
+                success: true,
+                message: '检修记录创建成功',
+                data: { id: maintenanceId }
+              });
+            });
+          }
+        });
+      });
+    });
+  });
+});
+
+// 上传检修记录照片
+app.post('/api/maintenance-records/:id/photos', authenticateToken, maintenancePhotosUpload.array('photos', 10), (req, res) => {
+  const maintenanceId = parseInt(req.params.id, 10);
+  const files = req.files;
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ success: false, message: '请选择要上传的照片' });
+  }
+
+  // 验证检修记录是否存在且属于当前用户
+  const checkSql = `SELECT * FROM maintenance_records WHERE id = ? AND user_id = ?`;
+  db.get(checkSql, [maintenanceId, req.user.id], (err, record) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (!record) {
+      // 删除已上传的文件
+      files.forEach(file => {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      });
+      return res.status(404).json({ success: false, message: '检修记录不存在或无权限' });
+    }
+
+    // 插入照片记录
+    const insertSql = `INSERT INTO maintenance_photos (maintenance_id, filename, original_name) VALUES (?, ?, ?)`;
+    let photoCount = 0;
+    let errorOccurred = false;
+
+    files.forEach((file) => {
+      db.run(insertSql, [maintenanceId, file.filename, file.originalname], (err) => {
+        photoCount++;
+        if (err && !errorOccurred) {
+          errorOccurred = true;
+          // 删除已上传的文件
+          files.forEach(f => {
+            try { fs.unlinkSync(f.path); } catch (e) {}
+          });
+          return res.status(500).json({ success: false, message: '保存照片记录失败' });
+        }
+
+        if (photoCount === files.length && !errorOccurred) {
+          return res.status(200).json({
+            success: true,
+            message: '照片上传成功',
+            data: files.map(file => ({
+              filename: file.filename,
+              originalName: file.originalname
+            }))
+          });
+        }
+      });
+    });
+  });
+});
+
+// 获取检修记录列表
+app.get('/api/maintenance-records', authenticateToken, (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const size = parseInt(req.query.size) || 10;
+  const offset = (page - 1) * size;
+  const status = req.query.status;
+  const sensorId = req.query.sensor_id;
+
+  let query = `SELECT mr.*, u.username FROM maintenance_records mr JOIN users u ON mr.user_id = u.id`;
+  let countQuery = `SELECT COUNT(*) as total FROM maintenance_records mr`;
+  const params = [];
+  const countParams = [];
+
+  // 根据用户角色过滤
+  if (req.user.role !== '管理员') {
+    query += ` WHERE mr.user_id = ?`;
+    countQuery += ` WHERE user_id = ?`;
+    params.push(req.user.id);
+    countParams.push(req.user.id);
+  }
+
+  // 状态过滤
+  if (status) {
+    query += params.length > 0 ? ' AND' : ' WHERE';
+    query += ` mr.status = ?`;
+    params.push(status);
+
+    countQuery += countParams.length > 0 ? ' AND' : ' WHERE';
+    countQuery += ` status = ?`;
+    countParams.push(status);
+  }
+
+  // 传感器过滤
+  if (sensorId) {
+    query += (params.length > 0 || status) ? ' AND' : ' WHERE';
+    query += ` mr.id IN (SELECT maintenance_id FROM maintenance_sensors WHERE sensor_id = ?)`;
+    params.push(sensorId);
+
+    countQuery += (countParams.length > 0 || status) ? ' AND' : ' WHERE';
+    countQuery += ` id IN (SELECT maintenance_id FROM maintenance_sensors WHERE sensor_id = ?)`;
+    countParams.push(sensorId);
+  }
+
+  query += ` ORDER BY mr.created_at DESC LIMIT ? OFFSET ?`;
+  params.push(size, offset);
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    db.get(countQuery, countParams, (err, result) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: '服务器内部错误' });
+      }
+
+      res.json({
+        success: true,
+        data: rows,
+        total: result.total
+      });
+    });
+  });
+});
+
+// 获取检修记录详情
+app.get('/api/maintenance-records/:id', authenticateToken, (req, res) => {
+  const maintenanceId = parseInt(req.params.id, 10);
+
+  // 验证权限
+  const checkSql = `SELECT * FROM maintenance_records WHERE id = ?`;
+  db.get(checkSql, [maintenanceId], (err, record) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: '检修记录不存在' });
+    }
+
+    // 非管理员只能查看自己的记录
+    if (req.user.role !== '管理员' && record.user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: '无权限查看此记录' });
+    }
+
+    // 获取关联的传感器
+    const sensorsSql = `SELECT * FROM maintenance_sensors WHERE maintenance_id = ?`;
+    db.all(sensorsSql, [maintenanceId], (err, sensors) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: '服务器内部错误' });
+      }
+
+      // 获取关联的照片
+      const photosSql = `SELECT * FROM maintenance_photos WHERE maintenance_id = ?`;
+      db.all(photosSql, [maintenanceId], (err, photos) => {
+        if (err) {
+          return res.status(500).json({ success: false, message: '服务器内部错误' });
+        }
+
+        res.json({
+          success: true,
+          data: {
+            ...record,
+            sensors,
+            photos
+          }
+        });
+      });
+    });
+  });
+});
+
+// 更新检修记录状态
+app.put('/api/maintenance-records/:id/status', authenticateToken, (req, res) => {
+  const maintenanceId = parseInt(req.params.id, 10);
+  const { status } = req.body;
+
+  if (!status || !['未读', '已读'].includes(status)) {
+    return res.status(400).json({ success: false, message: '无效的状态' });
+  }
+
+  // 验证权限
+  const checkSql = `SELECT * FROM maintenance_records WHERE id = ?`;
+  db.get(checkSql, [maintenanceId], (err, record) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: '检修记录不存在' });
+    }
+
+    // 非管理员只能更新自己的记录
+    if (req.user.role !== '管理员' && record.user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: '无权限更新此记录' });
+    }
+
+    const updateSql = `UPDATE maintenance_records SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`;
+    db.run(updateSql, [status, maintenanceId], function(err) {
+      if (err) {
+        return res.status(500).json({ success: false, message: '更新状态失败' });
+      }
+
+      res.json({ success: true, message: '状态更新成功' });
+    });
+  });
+});
+
+// 信息反馈与命令指示系统 API
+
+// 创建命令指示
+app.post('/api/commands', authenticateToken, (req, res) => {
+  const { title, content, deadline } = req.body;
+  const adminId = req.user.id;
+
+  if (!title || !content) {
+    return res.status(400).json({ success: false, message: '标题和内容为必填项' });
+  }
+
+  // 验证用户是否为管理员
+  if (req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '只有管理员可以创建命令' });
+  }
+
+  // 开始事务
+  db.run('BEGIN TRANSACTION', (err) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    // 插入命令
+    const insertCommandSql = `INSERT INTO commands (admin_id, title, content, deadline) VALUES (?, ?, ?, ?)`;
+    db.run(insertCommandSql, [adminId, title, content, deadline], function(err) {
+      if (err) {
+        db.run('ROLLBACK');
+        return res.status(500).json({ success: false, message: '创建命令失败' });
+      }
+
+      const commandId = this.lastID;
+
+      // 获取所有工人用户
+      const getWorkersSql = `SELECT id FROM users WHERE role = '工人'`;
+      db.all(getWorkersSql, [], (err, workers) => {
+        if (err) {
+          db.run('ROLLBACK');
+          return res.status(500).json({ success: false, message: '获取工人列表失败' });
+        }
+
+        // 插入命令接收者
+        const insertRecipientSql = `INSERT INTO command_recipients (command_id, user_id, status) VALUES (?, ?, ?)`;
+        let recipientCount = 0;
+        let errorOccurred = false;
+
+        if (workers.length === 0) {
+          // 如果没有工人，直接提交事务
+          db.run('COMMIT', (err) => {
+            if (err) {
+              return res.status(500).json({ success: false, message: '提交事务失败' });
+            }
+            return res.status(201).json({
+              success: true,
+              message: '命令创建成功',
+              data: { id: commandId }
+            });
+          });
+        } else {
+          workers.forEach((worker) => {
+            db.run(insertRecipientSql, [commandId, worker.id, '未执行'], (err) => {
+              recipientCount++;
+              if (err && !errorOccurred) {
+                errorOccurred = true;
+                db.run('ROLLBACK');
+                return res.status(500).json({ success: false, message: '添加接收者失败' });
+              }
+
+              if (recipientCount === workers.length && !errorOccurred) {
+                db.run('COMMIT', (err) => {
+                  if (err) {
+                    return res.status(500).json({ success: false, message: '提交事务失败' });
+                  }
+                  return res.status(201).json({
+                    success: true,
+                    message: '命令创建成功',
+                    data: { id: commandId }
+                  });
+                });
+              }
+            });
+          });
+        }
+      });
+    });
+  });
+});
+
+// 上传命令附件
+app.post('/api/commands/:id/attachments', authenticateToken, commandAttachmentsUpload.array('attachments', 5), (req, res) => {
+  const commandId = parseInt(req.params.id, 10);
+  const files = req.files;
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ success: false, message: '请选择要上传的附件' });
+  }
+
+  // 验证命令是否存在且属于当前管理员
+  const checkSql = `SELECT * FROM commands WHERE id = ? AND admin_id = ?`;
+  db.get(checkSql, [commandId, req.user.id], (err, command) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (!command) {
+      // 删除已上传的文件
+      files.forEach(file => {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      });
+      return res.status(404).json({ success: false, message: '命令不存在或无权限' });
+    }
+
+    // 插入附件记录
+    const insertSql = `INSERT INTO command_attachments (command_id, filename, original_name) VALUES (?, ?, ?)`;
+    let attachmentCount = 0;
+    let errorOccurred = false;
+
+    files.forEach((file) => {
+      db.run(insertSql, [commandId, file.filename, file.originalname], (err) => {
+        attachmentCount++;
+        if (err && !errorOccurred) {
+          errorOccurred = true;
+          // 删除已上传的文件
+          files.forEach(f => {
+            try { fs.unlinkSync(f.path); } catch (e) {}
+          });
+          return res.status(500).json({ success: false, message: '保存附件记录失败' });
+        }
+
+        if (attachmentCount === files.length && !errorOccurred) {
+          return res.status(200).json({
+            success: true,
+            message: '附件上传成功',
+            data: files.map(file => ({
+              filename: file.filename,
+              originalName: file.originalname
+            }))
+          });
+        }
+      });
+    });
+  });
+});
+
+// 获取命令列表
+app.get('/api/commands', authenticateToken, (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const size = parseInt(req.query.size) || 10;
+  const offset = (page - 1) * size;
+  const status = req.query.status;
+
+  if (req.user.role === '管理员') {
+    // 管理员查看所有命令
+    let query = `SELECT c.*, u.username as admin_name FROM commands c JOIN users u ON c.admin_id = u.id`;
+    let countQuery = `SELECT COUNT(*) as total FROM commands`;
+    const params = [];
+    const countParams = [];
+
+    if (status) {
+      query += ` WHERE c.status = ?`;
+      countQuery += ` WHERE status = ?`;
+      params.push(status);
+      countParams.push(status);
+    }
+
+    query += ` ORDER BY c.created_at DESC LIMIT ? OFFSET ?`;
+    params.push(size, offset);
+
+    db.all(query, params, (err, rows) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: '服务器内部错误' });
+      }
+
+      db.get(countQuery, countParams, (err, result) => {
+        if (err) {
+          return res.status(500).json({ success: false, message: '服务器内部错误' });
+        }
+
+        res.json({
+          success: true,
+          data: rows,
+          total: result.total
+        });
+      });
+    });
+  } else {
+    // 工人查看自己的命令
+    let query = `SELECT c.*, u.username as admin_name FROM commands c 
+                JOIN users u ON c.admin_id = u.id 
+                JOIN command_recipients cr ON c.id = cr.command_id 
+                WHERE cr.user_id = ?`;
+    let countQuery = `SELECT COUNT(*) as total FROM commands c 
+                    JOIN command_recipients cr ON c.id = cr.command_id 
+                    WHERE cr.user_id = ?`;
+    const params = [req.user.id];
+    const countParams = [req.user.id];
+
+    if (status) {
+      query += ` AND cr.status = ?`;
+      countQuery += ` AND cr.status = ?`;
+      params.push(status);
+      countParams.push(status);
+    }
+
+    query += ` ORDER BY c.created_at DESC LIMIT ? OFFSET ?`;
+    params.push(size, offset);
+
+    db.all(query, params, (err, rows) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: '服务器内部错误' });
+      }
+
+      db.get(countQuery, countParams, (err, result) => {
+        if (err) {
+          return res.status(500).json({ success: false, message: '服务器内部错误' });
+        }
+
+        res.json({
+          success: true,
+          data: rows,
+          total: result.total
+        });
+      });
+    });
+  }
+});
+
+// 获取命令详情
+app.get('/api/commands/:id', authenticateToken, (req, res) => {
+  const commandId = parseInt(req.params.id, 10);
+
+  // 验证权限
+  if (req.user.role === '管理员') {
+    // 管理员可以查看所有命令
+    const checkSql = `SELECT * FROM commands WHERE id = ?`;
+    db.get(checkSql, [commandId], (err, command) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: '服务器内部错误' });
+      }
+
+      if (!command) {
+        return res.status(404).json({ success: false, message: '命令不存在' });
+      }
+
+      // 获取接收者
+      const recipientsSql = `SELECT cr.*, u.username FROM command_recipients cr JOIN users u ON cr.user_id = u.id WHERE cr.command_id = ?`;
+      db.all(recipientsSql, [commandId], (err, recipients) => {
+        if (err) {
+          return res.status(500).json({ success: false, message: '服务器内部错误' });
+        }
+
+        // 获取附件
+        const attachmentsSql = `SELECT * FROM command_attachments WHERE command_id = ?`;
+        db.all(attachmentsSql, [commandId], (err, attachments) => {
+          if (err) {
+            return res.status(500).json({ success: false, message: '服务器内部错误' });
+          }
+
+          // 获取反馈
+          const feedbackSql = `SELECT cf.*, u.username FROM command_feedbacks cf JOIN users u ON cf.user_id = u.id WHERE cf.command_id = ?`;
+          db.all(feedbackSql, [commandId], (err, feedbacks) => {
+            if (err) {
+              return res.status(500).json({ success: false, message: '服务器内部错误' });
+            }
+
+            // 获取反馈照片
+            const feedbackPhotosSql = `SELECT * FROM command_feedback_photos WHERE feedback_id IN (SELECT id FROM command_feedbacks WHERE command_id = ?)`;
+            db.all(feedbackPhotosSql, [commandId], (err, feedbackPhotos) => {
+              if (err) {
+                return res.status(500).json({ success: false, message: '服务器内部错误' });
+              }
+
+              // 组织反馈照片
+              const feedbackPhotosMap = {};
+              feedbackPhotos.forEach(photo => {
+                if (!feedbackPhotosMap[photo.feedback_id]) {
+                  feedbackPhotosMap[photo.feedback_id] = [];
+                }
+                feedbackPhotosMap[photo.feedback_id].push(photo);
+              });
+
+              const feedbacksWithPhotos = feedbacks.map(feedback => ({
+                ...feedback,
+                photos: feedbackPhotosMap[feedback.id] || []
+              }));
+
+              res.json({
+                success: true,
+                data: {
+                  ...command,
+                  recipients,
+                  attachments,
+                  feedbacks: feedbacksWithPhotos
+                }
+              });
+            });
+          });
+        });
+      });
+    });
+  } else {
+    // 工人只能查看自己的命令
+    const checkSql = `SELECT c.* FROM commands c JOIN command_recipients cr ON c.id = cr.command_id WHERE c.id = ? AND cr.user_id = ?`;
+    db.get(checkSql, [commandId, req.user.id], (err, command) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: '服务器内部错误' });
+      }
+
+      if (!command) {
+        return res.status(404).json({ success: false, message: '命令不存在或无权限' });
+      }
+
+      // 获取接收者状态
+      const recipientSql = `SELECT * FROM command_recipients WHERE command_id = ? AND user_id = ?`;
+      db.get(recipientSql, [commandId, req.user.id], (err, recipient) => {
+        if (err) {
+          return res.status(500).json({ success: false, message: '服务器内部错误' });
+        }
+
+        // 获取附件
+        const attachmentsSql = `SELECT * FROM command_attachments WHERE command_id = ?`;
+        db.all(attachmentsSql, [commandId], (err, attachments) => {
+          if (err) {
+            return res.status(500).json({ success: false, message: '服务器内部错误' });
+          }
+
+          // 获取自己的反馈
+          const feedbackSql = `SELECT * FROM command_feedbacks WHERE command_id = ? AND user_id = ?`;
+          db.get(feedbackSql, [commandId, req.user.id], (err, feedback) => {
+            if (err) {
+              return res.status(500).json({ success: false, message: '服务器内部错误' });
+            }
+
+            // 获取反馈照片
+            if (feedback) {
+              const feedbackPhotosSql = `SELECT * FROM command_feedback_photos WHERE feedback_id = ?`;
+              db.all(feedbackPhotosSql, [feedback.id], (err, feedbackPhotos) => {
+                if (err) {
+                  return res.status(500).json({ success: false, message: '服务器内部错误' });
+                }
+
+                res.json({
+                  success: true,
+                  data: {
+                    ...command,
+                    recipient_status: recipient.status,
+                    attachments,
+                    feedback: feedback ? {
+                      ...feedback,
+                      photos: feedbackPhotos
+                    } : null
+                  }
+                });
+              });
+            } else {
+              res.json({
+                success: true,
+                data: {
+                  ...command,
+                  recipient_status: recipient.status,
+                  attachments,
+                  feedback: null
+                }
+              });
+            }
+          });
+        });
+      });
+    });
+  }
+});
+
+// 更新命令状态
+app.put('/api/commands/:id/status', authenticateToken, (req, res) => {
+  const commandId = parseInt(req.params.id, 10);
+  const { status } = req.body;
+
+  if (!status || !['未执行', '已执行'].includes(status)) {
+    return res.status(400).json({ success: false, message: '无效的状态' });
+  }
+
+  // 验证命令是否存在且用户是接收者
+  const checkSql = `SELECT * FROM command_recipients WHERE command_id = ? AND user_id = ?`;
+  db.get(checkSql, [commandId, req.user.id], (err, recipient) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (!recipient) {
+      return res.status(404).json({ success: false, message: '命令不存在或无权限' });
+    }
+
+    // 更新状态
+    let updateSql = `UPDATE command_recipients SET status = ?`;
+    const params = [status];
+
+    // 如果状态为已执行，记录完成时间
+    if (status === '已执行') {
+      updateSql += `, completed_at = CURRENT_TIMESTAMP`;
+    }
+
+    // 如果状态从未执行变为已执行，记录阅读时间
+    if (status === '已执行' && !recipient.read_at) {
+      updateSql += `, read_at = CURRENT_TIMESTAMP`;
+    }
+
+    updateSql += ` WHERE command_id = ? AND user_id = ?`;
+    params.push(commandId, req.user.id);
+
+    db.run(updateSql, params, function(err) {
+      if (err) {
+        return res.status(500).json({ success: false, message: '更新状态失败' });
+      }
+
+      res.json({ success: true, message: '状态更新成功' });
+    });
+  });
+});
+
+// 提交命令反馈
+app.post('/api/commands/:id/feedback', authenticateToken, (req, res) => {
+  const commandId = parseInt(req.params.id, 10);
+  const { content } = req.body;
+  const userId = req.user.id;
+
+  if (!content) {
+    return res.status(400).json({ success: false, message: '反馈内容为必填项' });
+  }
+
+  // 验证命令是否存在且用户是接收者
+  const checkSql = `SELECT * FROM command_recipients WHERE command_id = ? AND user_id = ?`;
+  db.get(checkSql, [commandId, userId], (err, recipient) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (!recipient) {
+      return res.status(404).json({ success: false, message: '命令不存在或无权限' });
+    }
+
+    // 检查是否已提交反馈
+    const checkFeedbackSql = `SELECT * FROM command_feedbacks WHERE command_id = ? AND user_id = ?`;
+    db.get(checkFeedbackSql, [commandId, userId], (err, existingFeedback) => {
+      if (err) {
+        return res.status(500).json({ success: false, message: '服务器内部错误' });
+      }
+
+      if (existingFeedback) {
+        return res.status(400).json({ success: false, message: '已提交过反馈' });
+      }
+
+      // 插入反馈
+      const insertSql = `INSERT INTO command_feedbacks (command_id, user_id, content) VALUES (?, ?, ?)`;
+      db.run(insertSql, [commandId, userId, content], function(err) {
+        if (err) {
+          return res.status(500).json({ success: false, message: '提交反馈失败' });
+        }
+
+        res.status(201).json({
+          success: true,
+          message: '反馈提交成功',
+          data: { id: this.lastID }
+        });
+      });
+    });
+  });
+});
+
+// 上传命令反馈照片
+app.post('/api/commands/:id/feedback/photos', authenticateToken, commandFeedbackPhotosUpload.array('photos', 10), (req, res) => {
+  const commandId = parseInt(req.params.id, 10);
+  const files = req.files;
+  const userId = req.user.id;
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ success: false, message: '请选择要上传的照片' });
+  }
+
+  // 获取反馈ID
+  const feedbackSql = `SELECT id FROM command_feedbacks WHERE command_id = ? AND user_id = ?`;
+  db.get(feedbackSql, [commandId, userId], (err, feedback) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+
+    if (!feedback) {
+      // 删除已上传的文件
+      files.forEach(file => {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      });
+      return res.status(404).json({ success: false, message: '反馈不存在' });
+    }
+
+    // 插入照片记录
+    const insertSql = `INSERT INTO command_feedback_photos (feedback_id, filename, original_name) VALUES (?, ?, ?)`;
+    let photoCount = 0;
+    let errorOccurred = false;
+
+    files.forEach((file) => {
+      db.run(insertSql, [feedback.id, file.filename, file.originalname], (err) => {
+        photoCount++;
+        if (err && !errorOccurred) {
+          errorOccurred = true;
+          // 删除已上传的文件
+          files.forEach(f => {
+            try { fs.unlinkSync(f.path); } catch (e) {}
+          });
+          return res.status(500).json({ success: false, message: '保存照片记录失败' });
+        }
+
+        if (photoCount === files.length && !errorOccurred) {
+          return res.status(200).json({
+            success: true,
+            message: '照片上传成功',
+            data: files.map(file => ({
+              filename: file.filename,
+              originalName: file.originalname
+            }))
+          });
+        }
+      });
+    });
   });
 });
