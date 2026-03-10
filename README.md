@@ -35,7 +35,7 @@
 
 1. **克隆项目**
 ```bash
-git clone https://github.com/你的用户名/AI_Water_New.git
+git clone https://github.com/MuZimx/AI_Water_New.git
 cd AI_Water_New
 ```
 
