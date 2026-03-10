@@ -230,4 +230,10 @@ export const API = {
     const response = await request<{ success: boolean; data: any }>(`/audio-processing-status/${filename}`);
     return response.success ? response.data : null;
   },
+
+  // 获取传感器最新音频
+  getSensorAudio: async (sensorId: number): Promise<{ url: string; filename: string }> => {
+    const response = await request<{ success: boolean; data: { url: string; filename: string } }>(`/sensors/${sensorId}/audio`);
+    return response.success ? response.data : { url: '', filename: '' };
+  },
 };

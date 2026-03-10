@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 type Sensor = {
   id: number;
@@ -15,6 +15,54 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletLoadedRef = useRef(false);
   const instanceRef = useRef<any>(null);
+  const [playingSensorId, setPlayingSensorId] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // 播放传感器音频
+  const playSensorAudio = async (sensorId: number) => {
+    if (playingSensorId === sensorId) {
+      // 停止播放
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      setPlayingSensorId(null);
+      return;
+    }
+
+    try {
+      // 停止当前播放
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      // 获取传感器音频URL（暂时写死）
+      // TODO: 实际应该从后端API获取
+      const audioUrl = '/uploads/sensor-audio.mp3';
+      const newAudio = new Audio(audioUrl);
+      audioRef.current = newAudio;
+
+      setPlayingSensorId(sensorId);
+      await newAudio.play();
+
+      newAudio.onended = () => {
+        setPlayingSensorId(null);
+      };
+    } catch (error) {
+      console.error('播放音频失败:', error);
+      alert('播放音频失败，请稍后重试');
+      setPlayingSensorId(null);
+    }
+  };
+
+  // 将 playSensorAudio 挂载到 window 对象，供 popup 中的 onclick 使用
+  useEffect(() => {
+    (window as any).playAudio = playSensorAudio;
+    return () => {
+      delete (window as any).playAudio;
+    };
+  }, [playingSensorId]);
 
   useEffect(() => {
   // 优先使用本地离线瓦片（如果配置了 NEXT_PUBLIC_OFFLINE_TILE_URL），
@@ -93,19 +141,39 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
             maxZoom: 18
           });
           L.tileLayer(offlineTemplate, {
-            attribution: '&copy; OpenStreetMap contributors'
+            attribution: '&copy; 天地图'
           }).addTo(instanceRef.current);
         }
 
         // render markers same as Leaflet fallback below
         const layerGroup = L.layerGroup();
         sensors.forEach((s: Sensor) => {
-          const marker = L.marker([s.latitude, s.longitude]);
+          const color = s.status === '严重漏水' ? '#ef4444' :
+                       s.status === '轻微漏水' ? '#eab308' :
+                       s.status === '正常' ? '#22c55e' : '#6b7280';
+          const icon = L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="
+              background-color: ${color};
+              width: 24px;
+              height: 24px;
+              border-radius: 50%;
+              border: 3px solid white;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            "></div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+          const marker = L.marker([s.latitude, s.longitude], { icon });
           const popupContent = `
             <div style="min-width:150px">
               <strong>${s.name}</strong><br/>
-              状态：${s.status || '未知'}<br/>
-              最近上报：${s.last_audio_time || '—'}
+              <span style="color:${color}">●</span> 状态：${s.status || '未知'}<br/>
+              最近上报：${s.last_audio_time || '—'}<br/>
+              <button onclick="window.playAudio(${s.id})" 
+                style="margin-top:8px;padding:4px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">
+                ${playingSensorId === s.id ? '停止播放' : '播放音频'}
+              </button>
             </div>
           `;
           marker.bindPopup(popupContent);
@@ -160,17 +228,25 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
           (instanceRef.current as any)._markerGroup = [];
 
           sensors.forEach((s: Sensor) => {
+            const color = s.status === '严重漏水' ? '#ef4444' :
+                         s.status === '轻微漏水' ? '#eab308' :
+                         s.status === '正常' ? '#22c55e' : '#6b7280';
             const el = document.createElement('div');
-            el.className = 'rounded-full bg-blue-600 w-4 h-4 border-2 border-white';
+            el.className = `rounded-full w-4 h-4 border-2 border-white`;
+            el.style.backgroundColor = color;
             const marker = new (window as any).maplibregl.Marker({ element: el })
               .setLngLat([s.longitude, s.latitude])
               .setPopup(new (window as any).maplibregl.Popup({ offset: 12 }).setHTML(`
                 <div style="min-width:150px">
                   <strong>${s.name}</strong><br/>
-                  状态：${s.status || '未知'}<br/>
-                  最近上报：${s.last_audio_time || '—'}
-                </div>
-              `))
+                  <span style="color:${color}">●</span> 状态：${s.status || '未知'}<br/>
+                  最近上报：${s.last_audio_time || '—'}<br/>
+              <button onclick="window.playAudio(${s.id})" 
+                      style="margin-top:8px;padding:4px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">
+                      ${playingSensorId === s.id ? '停止播放' : '播放音频'}
+                    </button>
+                  </div>
+                `))
               .addTo(instanceRef.current);
             (instanceRef.current as any)._markerGroup.push(marker);
           });
@@ -202,9 +278,18 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
           maxZoom: 18
         });
 
-        // 使用 OpenStreetMap 在线瓦片
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors'
+        // 使用天地图在线瓦片
+        const tdtKey = process.env.NEXT_PUBLIC_TDT_KEY || '您的天地图Key';
+        // 天地图影像底图
+        L.tileLayer(`https://t0.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tdtKey}`, {
+          attribution: '&copy; 天地图',
+          maxZoom: 18
+        }).addTo(instanceRef.current);
+
+        // 天地图注记图层
+        L.tileLayer(`https://t0.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tdtKey}`, {
+          attribution: '&copy; 天地图',
+          maxZoom: 18
         }).addTo(instanceRef.current);
       }
 
@@ -222,12 +307,32 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
       (instanceRef.current as any)._layerGroup = layerGroup;
 
       sensors.forEach((s: Sensor) => {
-        const marker = L.marker([s.latitude, s.longitude]);
+        const color = s.status === '严重漏水' ? '#ef4444' :
+                     s.status === '轻微漏水' ? '#eab308' :
+                     s.status === '正常' ? '#22c55e' : '#6b7280';
+        const icon = L.divIcon({
+          className: 'custom-marker',
+          html: `<div style="
+            background-color: ${color};
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+          "></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+        const marker = L.marker([s.latitude, s.longitude], { icon });
         const popupContent = `
           <div style="min-width:150px">
             <strong>${s.name}</strong><br/>
-            状态：${s.status || '未知'}<br/>
-            最近上报：${s.last_audio_time || '—'}
+            <span style="color:${color}">●</span> 状态：${s.status || '未知'}<br/>
+            最近上报：${s.last_audio_time || '—'}<br/>
+            <button onclick="window.playAudio(${s.id})" 
+              style="margin-top:8px;padding:4px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">
+              ${playingSensorId === s.id ? '停止播放' : '播放音频'}
+            </button>
           </div>
         `;
         marker.bindPopup(popupContent);

@@ -758,6 +758,24 @@ app.get('/api/sensors', (req, res) => {
   res.json({ success: true, data: sensors });
 });
 
+// 获取传感器最新音频接口
+app.get('/api/sensors/:id/audio', (req, res) => {
+  const { id } = req.params;
+
+  // 暂时返回写死的音频URL（实际应该从数据库查询该传感器对应的最新音频文件）
+  // TODO: 从数据库查询该传感器的最新音频记录
+  const audioData = {
+    url: '/uploads/sensor-audio.mp3',
+    filename: 'sensor-audio.mp3',
+    record_time: new Date().toISOString()
+  };
+
+  res.json({
+    success: true,
+    data: audioData
+  });
+});
+
 // 错误处理中间件
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
