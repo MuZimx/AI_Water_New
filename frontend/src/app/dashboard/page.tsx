@@ -313,7 +313,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20 md:pb-0">
       {/* 顶部导航栏 */}
-      <header className="sticky top-0 z-30 w-full border-b bg-white/80 backdrop-blur-md">
+      <header className="sticky top-0 z-[2000] w-full border-b bg-white/80 backdrop-blur-md">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-primary p-2 rounded-lg shadow-sm">
