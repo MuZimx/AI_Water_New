@@ -73,7 +73,9 @@ cd ../backend
 npm run dev
 ```
 
-然后访问 `http://localhost:3000/api/init-admin` 初始化管理员账户（POST 请求）:
+然后访问前端初始化页面 `http://localhost:9002/init-admin` 创建管理员账户。
+
+如需直接调用后端接口，也可使用 `POST http://localhost:3000/api/init-admin`：
 ```json
 {
   "username": "admin",

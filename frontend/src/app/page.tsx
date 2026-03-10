@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Droplets, Shield, Cpu, Lock, Waves, ArrowRight, LogIn, UserPlus } from 'lucide-react';
+import { Droplets, Shield, Cpu, Lock, Waves, ArrowRight, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [isInit, setIsInit] = useState<boolean | null>(null); // null: 检查中, true: 需要初始化, false: 已初始化
+  const [checking, setChecking] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,10 +29,14 @@ export default function LoginPage() {
         }
         // 检查系统是否已初始化
         const initStatus = await API.checkInitStatus();
-        setIsInit(!initStatus.initialized);
+        if (!initStatus.initialized) {
+          router.replace('/init-admin');
+          return;
+        }
       } catch {
-        // 发生错误时，默认显示登录
-        setIsInit(false);
+        // 发生错误时，默认允许登录页继续展示
+      } finally {
+        setChecking(false);
       }
     };
     checkStatus();
@@ -43,20 +47,9 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      if (isInit) {
-        // 初始化管理员账户
-        await API.initAdmin({ username, password });
-        toast({
-          title: "系统初始化成功",
-          description: "管理员账户已成功创建，请使用该账户登录。"
-        });
-        setIsInit(false);
-      } else {
-        // 普通登录
-        await API.login({ username, password });
-        toast({ title: "欢迎回来", description: `已登录为 ${username}` });
-        router.push('/dashboard');
-      }
+      await API.login({ username, password });
+      toast({ title: "欢迎回来", description: `已登录为 ${username}` });
+      router.push('/dashboard');
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -69,7 +62,7 @@ export default function LoginPage() {
   };
 
   // 如果还在检查初始化状态，显示加载
-  if (isInit === null) {
+  if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-white to-background">
         <div className="text-center space-y-4">
@@ -105,23 +98,21 @@ export default function LoginPage() {
         <Card className="border-none shadow-2xl bg-white/70 backdrop-blur-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl font-headline">
-              {isInit ? <UserPlus className="h-5 w-5 text-secondary" /> : <LogIn className="h-5 w-5 text-secondary" />}
-              {isInit ? '系统初始化' : '操作员访问'}
+              <LogIn className="h-5 w-5 text-secondary" />
+              操作员访问
             </CardTitle>
             <CardDescription>
-              {isInit
-                ? '首次使用需要创建管理员账户，该账户将拥有系统所有权限。'
-                : '输入您的凭据以访问异常检测控制面板。'}
+              输入您的凭据以访问异常检测控制面板。
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="username">{isInit ? '管理员用户名' : '用户名'}</Label>
+                <Label htmlFor="username">用户名</Label>
                 <div className="relative">
                   <Input
                     id="username"
-                    placeholder={isInit ? "例如：admin" : "例如：admin_operator"}
+                    placeholder="例如：admin_operator"
                     className="pl-9 h-11"
                     required
                     value={username}
@@ -148,7 +139,7 @@ export default function LoginPage() {
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-medium text-lg" disabled={loading}>
-                {loading ? '处理中...' : (isInit ? '创建管理员' : '验证登录')}
+                {loading ? '处理中...' : '验证登录'}
                 {!loading && <ArrowRight className="ml-2 h-5 w-5" />}
               </Button>
             </CardFooter>
