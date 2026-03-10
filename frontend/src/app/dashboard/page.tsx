@@ -19,10 +19,8 @@ import {
   Home,
   Bell,
   Activity,
-  CheckSquare,
-  MapPin,
-  Send,
-  RotateCcw
+  Wrench,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -80,8 +78,6 @@ export default function DashboardPage() {
   const [fromBannerMode, setFromBannerMode] = useState(false);
   const [sensorDetailsOpen, setSensorDetailsOpen] = useState(false);
   const [selectedSensorId, setSelectedSensorId] = useState<number | null>(null);
-  const [resetDialogOpen, setResetDialogOpen] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -102,6 +98,27 @@ export default function DashboardPage() {
     const interval = setInterval(loadFiles, 5000); // 5秒轮询一次
     return () => clearInterval(interval);
   }, [router]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast({ title: '网络已恢复', description: '当前已恢复联网，可继续同步数据。' });
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast({ variant: 'destructive', title: '当前离线', description: '网络连接已断开，数据可能无法实时同步。' });
+    };
+
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [toast]);
 
   // load sensors and workers on mount
   useEffect(() => {
@@ -172,7 +189,7 @@ export default function DashboardPage() {
 
   const loadSensors = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}/api/sensors`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3001'}/api/sensors`);
       const data = await res.json();
       if (data && data.success) setSensors(data.data || []);
     } catch (e) {
@@ -333,7 +350,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20 md:pb-0">
       {/* 顶部导航栏 */}
-      <header className="sticky top-0 z-30 w-full border-b bg-white/80 backdrop-blur-md">
+      <header className="sticky top-0 z-[2000] w-full border-b bg-white/80 backdrop-blur-md">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-primary p-2 rounded-lg shadow-sm">
@@ -343,6 +360,16 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-2">
+            <div className="hidden sm:flex items-center gap-2">
+              <Button variant="ghost" className="h-10 px-3" onClick={() => router.push('/maintenance')}>
+                <Wrench className="h-4 w-4 mr-2" />
+                <span>检修记录</span>
+              </Button>
+              <Button variant="ghost" className="h-10 px-3" onClick={() => router.push('/commands')}>
+                <MessageSquare className="h-4 w-4 mr-2" />
+                <span>命令管理</span>
+              </Button>
+            </div>
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-secondary/10 rounded-full border border-secondary/20 mr-2">
               <div className="h-2 w-2 rounded-full bg-secondary animate-pulse" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-secondary-foreground">监控中</span>
@@ -383,6 +410,15 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
+      {!isOnline && (
+        <div className="relative z-30 bg-destructive text-destructive-foreground border-b">
+          <div className="container mx-auto px-4 py-2 text-sm font-medium">
+            当前处于离线状态，数据可能不会实时更新。
+          </div>
+        </div>
+      )}
 
       {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
       {currentUser?.role === '工人' && workerStatus?.status === '工作中' && currentCommand && (
@@ -883,7 +919,10 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 flex items-center justify-between text-xs text-muted-foreground">
           <p>© {new Date().getFullYear()} AI Water 监控系统。所有关键指标运行正常。</p>
           <div className="flex items-center gap-6">
-            <span className="flex items-center gap-1.5"><div className="h-1.5 w-1.5 rounded-full bg-secondary" /> 网络同步正常</span>
+            <span className="flex items-center gap-1.5">
+              <div className={cn('h-1.5 w-1.5 rounded-full', isOnline ? 'bg-secondary' : 'bg-destructive animate-pulse')} />
+              {isOnline ? '网络同步正常' : '离线模式'}
+            </span>
             <span className="flex items-center gap-1.5"><div className="h-1.5 w-1.5 rounded-full bg-secondary" /> 安全加密</span>
           </div>
         </div>

@@ -16,7 +16,7 @@
   "author": "南哪战队",
   "license": "MIT",
   "dependencies": {
-    "bcrypt": "^5.1.0",
+    "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.0",
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
