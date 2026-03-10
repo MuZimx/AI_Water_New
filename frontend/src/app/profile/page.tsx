@@ -88,7 +88,7 @@ export default function ProfilePage() {
                   <div className="pt-4 border-t border-white/10 space-y-3">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-white/60">操作员 ID</span>
-                      <span className="font-mono">{user?.id ? String(user.id).slice(0, 8) : 'Loading'}...</span>
+                      <span className="font-mono">{user?.id ? String(user.id).slice(0, 8) : 'Loading...'}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-white/60">上次轮换</span>
