@@ -120,7 +120,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
 
     setIsSubmitting(true);
     try {
-      await API.submitFeedback(
+      await (API as any).submitFeedback(
         selectedCommand.id,
         feedback,
         selectedPhotos.length > 0 ? selectedPhotos : undefined,

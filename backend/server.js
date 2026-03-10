@@ -1175,7 +1175,7 @@ app.get('/api/commands', authenticateToken, (req, res) => {
 });
 
 // 工人提交维修反馈（支持图片上传）
-app.post('/api/commands/:id/feedback', authenticateToken, imageUpload.array('photos', 5), (req, res) => {
+app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosUpload.array('photos', 5), (req, res) => {
   const { id } = req.params;
   const { feedback, update_sensor } = req.body;
 

@@ -20,7 +20,11 @@ import {
   Bell,
   Activity,
   Wrench,
-  MessageSquare
+  MessageSquare,
+  MapPin,
+  CheckSquare,
+  Send,
+  RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,6 +82,9 @@ export default function DashboardPage() {
   const [fromBannerMode, setFromBannerMode] = useState(false);
   const [sensorDetailsOpen, setSensorDetailsOpen] = useState(false);
   const [selectedSensorId, setSelectedSensorId] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -299,7 +306,7 @@ export default function DashboardPage() {
         worker_ids: selectedWorkers,
         sensor_id: selectedSensor.id,
         deadline: deadline || undefined,
-      });
+      } as any);
       toast({ title: "派工成功", description: `已向 ${selectedWorkers.length} 名工人发送维修通知` });
       setAssignDialogOpen(false);
       setSelectedSensor(null);
