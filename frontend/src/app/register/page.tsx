@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserPlus, ArrowRight, Shield, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,20 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState<'工人' | '管理员'>('工人');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const checkInitStatus = async () => {
+      try {
+        const initStatus = await API.checkInitStatus();
+        if (!initStatus.initialized) {
+          router.replace('/init-admin');
+        }
+      } catch {
+      }
+    };
+
+    checkInitStatus();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
