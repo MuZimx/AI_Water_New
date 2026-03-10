@@ -79,6 +79,7 @@ export default function DashboardPage() {
   const [fromBannerMode, setFromBannerMode] = useState(false);
   const [sensorDetailsOpen, setSensorDetailsOpen] = useState(false);
   const [selectedSensorId, setSelectedSensorId] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -99,6 +100,27 @@ export default function DashboardPage() {
     const interval = setInterval(loadFiles, 5000); // 5秒轮询一次
     return () => clearInterval(interval);
   }, [router]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      toast({ title: '网络已恢复', description: '当前已恢复联网，可继续同步数据。' });
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      toast({ variant: 'destructive', title: '当前离线', description: '网络连接已断开，数据可能无法实时同步。' });
+    };
+
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [toast]);
 
   // load sensors and workers on mount
   useEffect(() => {
@@ -354,6 +376,15 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
+      {!isOnline && (
+        <div className="relative z-30 bg-destructive text-destructive-foreground border-b">
+          <div className="container mx-auto px-4 py-2 text-sm font-medium">
+            当前处于离线状态，数据可能不会实时更新。
+          </div>
+        </div>
+      )}
 
       {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
       {currentUser?.role === '工人' && workerStatus?.status === '工作中' && currentCommand && (
@@ -852,7 +883,10 @@ export default function DashboardPage() {
         <div className="container mx-auto px-4 flex items-center justify-between text-xs text-muted-foreground">
           <p>© {new Date().getFullYear()} AI Water 监控系统。所有关键指标运行正常。</p>
           <div className="flex items-center gap-6">
-            <span className="flex items-center gap-1.5"><div className="h-1.5 w-1.5 rounded-full bg-secondary" /> 网络同步正常</span>
+            <span className="flex items-center gap-1.5">
+              <div className={cn('h-1.5 w-1.5 rounded-full', isOnline ? 'bg-secondary' : 'bg-destructive animate-pulse')} />
+              {isOnline ? '网络同步正常' : '离线模式'}
+            </span>
             <span className="flex items-center gap-1.5"><div className="h-1.5 w-1.5 rounded-full bg-secondary" /> 安全加密</span>
           </div>
         </div>
