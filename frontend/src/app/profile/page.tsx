@@ -38,7 +38,7 @@ export default function ProfilePage() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      toast({ variant: "destructive", title: "不匹配", description: "新令牌输入不一致。" });
+      toast({ variant: "destructive", title: "不匹配", description: "新密码前后输入不一致。" });
       return;
     }
 
@@ -49,7 +49,7 @@ export default function ProfilePage() {
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      toast({ title: "安全设置已更新", description: "您的操作员访问令牌已成功轮换。" });
+      toast({ title: "密码已更新", description: "您的密码已经成功更新。" });
     }, 1500);
   };
 
@@ -74,7 +74,7 @@ export default function ProfilePage() {
                  <User className="h-24 w-24" />
                </div>
                <CardHeader>
-                 <CardTitle className="font-headline">身份档案</CardTitle>
+                 <CardTitle className="font-headline">个人中心</CardTitle>
                  <CardDescription className="text-white/60">已验证的监控人员</CardDescription>
                </CardHeader>
                <CardContent className="space-y-4 relative z-10">
@@ -87,7 +87,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="pt-4 border-t border-white/10 space-y-3">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-white/60">操作员 ID</span>
+                      <span className="text-white/60">用户ID</span>
                       <span className="font-mono">{user?.id ? String(user.id).slice(0, 8) : 'Loading...'}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
@@ -125,15 +125,15 @@ export default function ProfilePage() {
               <CardHeader className="bg-muted/30 border-b">
                 <CardTitle className="font-headline flex items-center gap-2 text-lg">
                   <Key className="h-5 w-5 text-secondary" />
-                  安全协议
+                  修改密码
                 </CardTitle>
-                <CardDescription>更新您的操作员安全令牌以维护基础设施完整性。</CardDescription>
+                <CardDescription>定期修改密码会极大地提升系统安全性</CardDescription>
               </CardHeader>
               <form onSubmit={handleChangePassword}>
                 <CardContent className="p-6 space-y-6">
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="old">当前安全令牌</Label>
+                      <Label htmlFor="old">当前密码</Label>
                       <div className="relative">
                         <Input 
                           id="old" 
@@ -148,7 +148,7 @@ export default function ProfilePage() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="new">新令牌</Label>
+                        <Label htmlFor="new">新密码</Label>
                         <Input 
                           id="new" 
                           type="password" 
@@ -158,7 +158,7 @@ export default function ProfilePage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="confirm">确认新令牌</Label>
+                        <Label htmlFor="confirm">确认新密码</Label>
                         <Input 
                           id="confirm" 
                           type="password" 
@@ -173,13 +173,14 @@ export default function ProfilePage() {
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
                     <Shield className="h-5 w-5 text-amber-600 flex-shrink-0" />
                     <p className="text-xs text-amber-800 leading-relaxed">
-                      <strong>安全策略：</strong> 令牌长度应至少为 8 个字符，并包含多种特殊字符。请避免使用顺序的基础设施 ID。
+                      <strong>安全策略：</strong><br></br>
+                      密码长度应至少为 8 个字符，并包含大小写字母和特殊符号，避免使用弱密码。
                     </p>
                   </div>
                 </CardContent>
                 <CardFooter className="bg-muted/10 border-t p-6">
                   <Button type="submit" className="ml-auto bg-primary hover:bg-primary/90" disabled={loading}>
-                    {loading ? '正在轮换令牌...' : '更新安全协议'}
+                    {loading ? '正在更新密码...' : '更新密码'}
                     {!loading && <Save className="ml-2 h-4 w-4" />}
                   </Button>
                 </CardFooter>
