@@ -80,6 +80,14 @@ const upload = multer({
   }
 });
 
+// 图片上传的multer配置（用于工人反馈照片）
+const imageUpload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 限制文件大小为10MB
+  }
+});
+
 // 中间件
 app.use(cors());
 app.use(bodyParser.json());
@@ -111,6 +119,7 @@ db.run(`CREATE TABLE IF NOT EXISTS users (
   role TEXT DEFAULT '工人',
   full_name TEXT,
   phone TEXT,
+  worker_status TEXT DEFAULT '空闲',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
@@ -131,6 +140,7 @@ const tryAddColumn = (table, columnDef) => {
 tryAddColumn('users', "role TEXT DEFAULT '工人'");
 tryAddColumn('users', 'full_name TEXT');
 tryAddColumn('users', 'phone TEXT');
+tryAddColumn('users', "worker_status TEXT DEFAULT '空闲'");
 
 // 创建音频文件表
 db.run(`CREATE TABLE IF NOT EXISTS audio_files (
@@ -144,6 +154,32 @@ db.run(`CREATE TABLE IF NOT EXISTS audio_files (
   risk_level TEXT DEFAULT '未检测',
   confidence REAL DEFAULT 0.0,
   FOREIGN KEY (user_id) REFERENCES users (id)
+)`);
+
+// 创建指令表和接收者表
+db.run(`CREATE TABLE IF NOT EXISTS commands (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  command_number TEXT UNIQUE NOT NULL,
+  admin_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  sensor_id INTEGER,
+  deadline DATETIME,
+  status TEXT CHECK(status IN ('草稿', '已发布', '进行中', '已完成', '已取消')) DEFAULT '已发布',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL
+)`);
+
+db.run(`CREATE TABLE IF NOT EXISTS command_recipients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  command_id INTEGER NOT NULL,
+  worker_id INTEGER NOT NULL,
+  read_status INTEGER DEFAULT 0,
+  feedback TEXT,
+  feedback_photos TEXT,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (command_id) REFERENCES commands(id) ON DELETE CASCADE,
+  FOREIGN KEY (worker_id) REFERENCES users(id) ON DELETE CASCADE
 )`);
 
 // 检查是否需要初始化数据库
@@ -755,24 +791,266 @@ app.get('/api/sensors', (req, res) => {
     { id: 3, name: '传感器-鼓楼区-003', latitude: 32.07, longitude: 118.77, status: '严重漏水', last_audio_time: '2026-03-09T08:45:00Z' }
   ];
 
-  res.json({ success: true, data: sensors });
+  // 查询哪些传感器有未完成的指令
+  const query = `SELECT DISTINCT sensor_id FROM commands WHERE sensor_id IS NOT NULL AND status IN ('已发布', '进行中')`;
+  db.all(query, [], (err, rows) => {
+    if (!err && rows) {
+      const assignedSensorIds = new Set(rows.map(r => r.sensor_id));
+      sensors.forEach(sensor => {
+        sensor.assigned = assignedSensorIds.has(sensor.id);
+      });
+    }
+    res.json({ success: true, data: sensors });
+  });
 });
 
-// 获取传感器最新音频接口
-app.get('/api/sensors/:id/audio', (req, res) => {
+// 获取工人列表接口（供管理员派工使用）
+app.get('/api/workers', authenticateToken, (req, res) => {
+  // 验证管理员权限
+  if (req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const query = `SELECT id, username, full_name, phone, role, worker_status FROM users WHERE role = ?`;
+  db.all(query, ['工人'], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+    res.json({ success: true, data: rows });
+  });
+});
+
+// 创建派工指令接口
+app.post('/api/commands', authenticateToken, (req, res) => {
+  // 验证管理员权限
+  if (req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const { title, content, worker_ids, sensor_id, deadline } = req.body;
+
+  if (!title || !content || !worker_ids || !Array.isArray(worker_ids) || worker_ids.length === 0) {
+    return res.status(400).json({ success: false, message: '参数不完整' });
+  }
+
+  // 生成指令编号
+  const commandNumber = 'CMD' + Date.now();
+
+  db.serialize(() => {
+    // 插入指令
+    const insertCommand = `INSERT INTO commands (command_number, admin_id, title, content, sensor_id, deadline, status) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    db.run(insertCommand, [commandNumber, req.user.id, title, content, sensor_id || null, deadline || null, '已发布'], function(err) {
+      if (err) {
+        return res.status(500).json({ success: false, message: '创建指令失败' });
+      }
+
+      const commandId = this.lastID;
+
+
+      // 批量插入接收者
+      const stmt = db.prepare(`INSERT INTO command_recipients (command_id, worker_id) VALUES (?, ?)`);
+      worker_ids.forEach(workerId => {
+        stmt.run(commandId, workerId);
+      });
+      stmt.finalize();
+
+      // 更新所有被分配工人的状态为"工作中"
+      worker_ids.forEach(workerId => {
+        db.run(`UPDATE users SET worker_status = '工作中' WHERE id = ?`, [workerId]);
+      });
+
+      res.json({
+        success: true,
+        message: '派工成功',
+        data: { commandId, commandNumber }
+      });
+    });
+  });
+});
+
+// 获取工人收到的派工指令
+app.get('/api/commands/received', authenticateToken, (req, res) => {
+  if (req.user.role !== '工人') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const query = `
+    SELECT c.*, cr.read_status, cr.feedback, cr.feedback_photos, cr.updated_at as response_time, u.username as worker_name, u.full_name as worker_full_name
+    FROM commands c
+    INNER JOIN command_recipients cr ON c.id = cr.command_id
+    INNER JOIN users u ON cr.worker_id = u.id
+    WHERE cr.worker_id = ?
+    ORDER BY c.created_at DESC
+  `;
+
+  db.all(query, [req.user.id], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+    res.json({ success: true, data: rows });
+  });
+});
+
+// 获取指令的反馈详情（所有用户可见）
+app.get('/api/commands/:id/details', authenticateToken, (req, res) => {
   const { id } = req.params;
 
-  // 暂时返回写死的音频URL（实际应该从数据库查询该传感器对应的最新音频文件）
-  // TODO: 从数据库查询该传感器的最新音频记录
-  const audioData = {
-    url: '/uploads/sensor-audio.mp3',
-    filename: 'sensor-audio.mp3',
-    record_time: new Date().toISOString()
-  };
+  const query = `
+    SELECT c.*, cr.read_status, cr.feedback, cr.feedback_photos, cr.updated_at as response_time,
+           u.username as worker_name, u.full_name as worker_full_name
+    FROM commands c
+    INNER JOIN command_recipients cr ON c.id = cr.command_id
+    INNER JOIN users u ON cr.worker_id = u.id
+    WHERE c.id = ?
+  `;
 
-  res.json({
-    success: true,
-    data: audioData
+  db.all(query, [id], (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+    // 解析photos数组
+    const result = rows.map(row => {
+      let photos = [];
+      if (row.feedback_photos) {
+        try {
+          photos = JSON.parse(row.feedback_photos);
+        } catch (e) {
+          photos = [];
+        }
+      }
+      return { ...row, photos };
+    });
+    res.json({ success: true, data: result });
+  });
+});
+
+// 按传感器ID查询指令（所有用户可见）
+app.get('/api/commands', authenticateToken, (req, res) => {
+  const { sensor_id } = req.query;
+
+  let query = `
+    SELECT c.*, cr.read_status, cr.feedback, cr.feedback_photos, cr.updated_at as response_time,
+           u.username as worker_name, u.full_name as worker_full_name
+    FROM commands c
+    INNER JOIN command_recipients cr ON c.id = cr.command_id
+    INNER JOIN users u ON cr.worker_id = u.id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (sensor_id) {
+    query += ` AND c.sensor_id = ?`;
+    params.push(sensor_id);
+  }
+
+  query += ` ORDER BY c.created_at DESC`;
+
+  db.all(query, params, (err, rows) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+    // 解析photos数组
+    const result = rows.map(row => {
+      let photos = [];
+      if (row.feedback_photos) {
+        try {
+          photos = JSON.parse(row.feedback_photos);
+        } catch (e) {
+          photos = [];
+        }
+      }
+      return { ...row, photos };
+    });
+    res.json({ success: true, data: result });
+  });
+});
+
+// 工人提交维修反馈（支持图片上传）
+app.post('/api/commands/:id/feedback', authenticateToken, imageUpload.array('photos', 5), (req, res) => {
+  const { id } = req.params;
+  const { feedback, update_sensor } = req.body;
+
+  if (req.user.role !== '工人') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  // 处理上传的图片
+  let photoUrls = [];
+  if (req.files && Array.isArray(req.files)) {
+    photoUrls = req.files.map(file => `/uploads/${file.filename}`);
+  }
+
+  db.serialize(() => {
+    // 获取指令信息（用于获取传感器ID）
+    db.get(`SELECT sensor_id FROM commands WHERE id = ?`, [id], (err, command) => {
+      if (err || !command) {
+        return res.status(500).json({ success: false, message: '指令不存在' });
+      }
+
+      const updateQuery = `
+        UPDATE command_recipients
+        SET feedback = ?, feedback_photos = ?, read_status = 1, updated_at = ?
+        WHERE command_id = ? AND worker_id = ?
+      `;
+
+      db.run(updateQuery, [feedback || '', JSON.stringify(photoUrls), new Date().toISOString(), id, req.user.id], function(err) {
+        if (err) {
+          return res.status(500).json({ success: false, message: '提交反馈失败' });
+        }
+        if (this.changes === 0) {
+          return res.status(404).json({ success: false, message: '指令不存在' });
+        }
+
+        // 更新工人状态为"空闲"
+        db.run(`UPDATE users SET worker_status = '空闲' WHERE id = ?`, [req.user.id]);
+
+        // 更新指令状态为"已完成"
+        db.run(`UPDATE commands SET status = '已完成' WHERE id = ?`, [id]);
+
+        // 如果请求要求更新传感器状态为"正常"
+        if (update_sensor === 'true' && command.sensor_id) {
+          // 注意：这里需要更新传感器状态，但当前传感器数据是硬编码的
+          // 如果传感器数据存储在数据库中，需要添加相应的更新逻辑
+          console.log(`传感器 ${command.sensor_id} 状态将被更新为正常（当前为模拟数据）`);
+        }
+
+        res.json({ success: true, message: '反馈提交成功', photos: photoUrls });
+      });
+    });
+  });
+});
+
+// 管理员标记指令为已完成
+app.put('/api/commands/:id/complete', authenticateToken, (req, res) => {
+  const { id } = req.params;
+
+  if (req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  db.run(`UPDATE commands SET status = '已完成' WHERE id = ?`, [id], function(err) {
+    if (err) {
+      return res.status(500).json({ success: false, message: '更新失败' });
+    }
+    res.json({ success: true, message: '指令已标记为完成' });
+  });
+});
+
+// 获取当前工人状态（用于前端轮询显示）
+app.get('/api/workers/my-status', authenticateToken, (req, res) => {
+  if (req.user.role !== '工人') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const query = `SELECT worker_status FROM users WHERE id = ?`;
+  db.get(query, [req.user.id], (err, row) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+    if (!row) {
+      return res.status(404).json({ success: false, message: '用户不存在' });
+    }
+    res.json({ success: true, data: { status: row.worker_status } });
   });
 });
 

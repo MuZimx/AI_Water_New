@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 type Sensor = {
   id: number;
@@ -9,60 +9,13 @@ type Sensor = {
   longitude: number;
   status?: string;
   last_audio_time?: string | null;
+  assigned?: boolean; // 是否已分配工人
 };
 
-export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
+export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetails }: { sensors: Sensor[]; onSensorClick?: (sensor: Sensor) => void; isAdmin?: boolean; onViewDetails?: (sensorId: number) => void }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletLoadedRef = useRef(false);
   const instanceRef = useRef<any>(null);
-  const [playingSensorId, setPlayingSensorId] = useState<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // 播放传感器音频
-  const playSensorAudio = async (sensorId: number) => {
-    if (playingSensorId === sensorId) {
-      // 停止播放
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-      setPlayingSensorId(null);
-      return;
-    }
-
-    try {
-      // 停止当前播放
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-
-      // 获取传感器音频URL（暂时写死）
-      // TODO: 实际应该从后端API获取
-      const audioUrl = '/uploads/sensor-audio.mp3';
-      const newAudio = new Audio(audioUrl);
-      audioRef.current = newAudio;
-
-      setPlayingSensorId(sensorId);
-      await newAudio.play();
-
-      newAudio.onended = () => {
-        setPlayingSensorId(null);
-      };
-    } catch (error) {
-      console.error('播放音频失败:', error);
-      alert('播放音频失败，请稍后重试');
-      setPlayingSensorId(null);
-    }
-  };
-
-  // 将 playSensorAudio 挂载到 window 对象，供 popup 中的 onclick 使用
-  useEffect(() => {
-    (window as any).playAudio = playSensorAudio;
-    return () => {
-      delete (window as any).playAudio;
-    };
-  }, [playingSensorId]);
 
   useEffect(() => {
   // 优先使用本地离线瓦片（如果配置了 NEXT_PUBLIC_OFFLINE_TILE_URL），
@@ -165,18 +118,68 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
             iconAnchor: [12, 12]
           });
           const marker = L.marker([s.latitude, s.longitude], { icon });
+          const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水';
+          const isAssigned = s.assigned === true;
+          let buttons = '';
+          if (isAbnormal) {
+            if (isAdmin) {
+              buttons = '<div style="margin-top:8px;"><button data-sensor-id="' + s.id + '" ' + (isAssigned ? 'disabled style="width:100%;padding:6px;background:#9ca3af;color:#6b7280;border:none;border-radius:4px;cursor:not-allowed;font-size:12px;">已分配</button>' : 'class="assign-worker-btn" style="width:100%;padding:6px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">分配维修工</button>') + '</div>';
+            } else {
+              buttons = '<div style="margin-top:8px;"><button data-view-details="' + s.id + '" style="width:100%;padding:6px;background:#22c55e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">查看详情</button></div>';
+            }
+          }
           const popupContent = `
             <div style="min-width:150px">
               <strong>${s.name}</strong><br/>
               <span style="color:${color}">●</span> 状态：${s.status || '未知'}<br/>
-              最近上报：${s.last_audio_time || '—'}<br/>
-              <button onclick="window.playAudio(${s.id})" 
-                style="margin-top:8px;padding:4px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">
-                ${playingSensorId === s.id ? '停止播放' : '播放音频'}
-              </button>
+              最近上报：${s.last_audio_time || '—'}
+              ${buttons}
             </div>
           `;
           marker.bindPopup(popupContent);
+
+          // 添加点击事件 - 只在点击时触发，不影响弹窗显示
+          marker.on('click', () => {
+            // 不阻止默认行为，让弹窗正常显示
+            if (onSensorClick && isAbnormal && isAdmin) {
+              // 点击时记录选中的传感器，但仍然显示弹窗
+              const sensorData = s;
+              // 将传感器ID通过事件传递
+              if (typeof window !== 'undefined') {
+                (window as any).lastClickedSensor = sensorData;
+              }
+            }
+          });
+
+          // 监听弹窗内的按钮点击
+          marker.on('popupopen', () => {
+            const popup = marker.getPopup();
+            if (popup) {
+              const popupContent = popup.getElement();
+              if (popupContent) {
+                  const assignBtn = popupContent.querySelector('.assign-worker-btn');
+                  if (assignBtn) {
+                    assignBtn.addEventListener('click', (e: Event) => {
+                      e.stopPropagation();
+                      if (typeof window !== 'undefined') {
+                        (window as any).lastClickedSensor = s;
+                        if (typeof (window as any).triggerAssignWorker === 'function') {
+                          (window as any).triggerAssignWorker(s.id);
+                        }
+                      }
+                    });
+                  }
+                  const viewDetailsBtn = popupContent.querySelector('[data-view-details]');
+                  if (viewDetailsBtn && onViewDetails) {
+                    viewDetailsBtn.addEventListener('click', (e: Event) => {
+                      e.stopPropagation();
+                      onViewDetails(s.id);
+                    });
+                  }
+              }
+            }
+          });
+
           marker.addTo(layerGroup);
         });
         layerGroup.addTo(instanceRef.current);
@@ -234,20 +237,65 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
             const el = document.createElement('div');
             el.className = `rounded-full w-4 h-4 border-2 border-white`;
             el.style.backgroundColor = color;
+            const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水';
+            const isAssigned = s.assigned === true;
+            let buttons = '';
+            if (isAbnormal) {
+              if (isAdmin) {
+                buttons = '<div style="margin-top:8px;"><button data-sensor-id="' + s.id + '" ' + (isAssigned ? 'disabled style="width:100%;padding:6px;background:#9ca3af;color:#6b7280;border:none;border-radius:4px;cursor:not-allowed;font-size:12px;">已分配</button>' : 'class="assign-worker-btn" style="width:100%;padding:6px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">分配维修工</button>') + '</div>';
+              } else {
+                buttons = '<div style="margin-top:8px;"><button data-view-details="' + s.id + '" style="width:100%;padding:6px;background:#22c55e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">查看详情</button></div>';
+              }
+            }
             const marker = new (window as any).maplibregl.Marker({ element: el })
               .setLngLat([s.longitude, s.latitude])
               .setPopup(new (window as any).maplibregl.Popup({ offset: 12 }).setHTML(`
                 <div style="min-width:150px">
                   <strong>${s.name}</strong><br/>
                   <span style="color:${color}">●</span> 状态：${s.status || '未知'}<br/>
-                  最近上报：${s.last_audio_time || '—'}<br/>
-              <button onclick="window.playAudio(${s.id})" 
-                      style="margin-top:8px;padding:4px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">
-                      ${playingSensorId === s.id ? '停止播放' : '播放音频'}
-                    </button>
-                  </div>
+                  最近上报：${s.last_audio_time || '—'}
+                  ${buttons}
+                </div>
                 `))
               .addTo(instanceRef.current);
+
+            // 添加点击事件
+            marker.getElement()?.addEventListener('click', () => {
+              if (onSensorClick && isAbnormal && isAdmin) {
+                if (typeof window !== 'undefined') {
+                  (window as any).lastClickedSensor = s;
+                }
+              }
+            });
+
+            // 监听弹窗内的按钮点击
+            marker.on('open', () => {
+              const popup = marker.getPopup();
+              if (popup) {
+                const popupElement = (popup as any).getElement();
+                if (popupElement) {
+                  const assignBtn = popupElement.querySelector('.assign-worker-btn');
+                  if (assignBtn) {
+                    assignBtn.addEventListener('click', (e: Event) => {
+                      e.stopPropagation();
+                      if (typeof window !== 'undefined') {
+                        (window as any).lastClickedSensor = s;
+                        if (typeof (window as any).triggerAssignWorker === 'function') {
+                          (window as any).triggerAssignWorker(s.id);
+                        }
+                      }
+                    });
+                  }
+                  const viewDetailsBtn = popupElement.querySelector('[data-view-details]');
+                  if (viewDetailsBtn && onViewDetails) {
+                    viewDetailsBtn.addEventListener('click', (e: Event) => {
+                      e.stopPropagation();
+                      onViewDetails(s.id);
+                    });
+                  }
+                }
+              }
+            });
             (instanceRef.current as any)._markerGroup.push(marker);
           });
 
@@ -324,18 +372,64 @@ export default function SensorMap({ sensors }: { sensors: Sensor[] }) {
           iconAnchor: [12, 12]
         });
         const marker = L.marker([s.latitude, s.longitude], { icon });
+        const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水';
+        const isAssigned = s.assigned === true;
+        let buttons = '';
+        if (isAbnormal) {
+          if (isAdmin) {
+            buttons = '<div style="margin-top:8px;"><button data-sensor-id="' + s.id + '" ' + (isAssigned ? 'disabled style="width:100%;padding:6px;background:#9ca3af;color:#6b7280;border:none;border-radius:4px;cursor:not-allowed;font-size:12px;">已分配</button>' : 'class="assign-worker-btn" style="width:100%;padding:6px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">分配维修工</button>') + '</div>';
+          } else {
+            buttons = '<div style="margin-top:8px;"><button data-view-details="' + s.id + '" style="width:100%;padding:6px;background:#22c55e;color:white;border:none;border-radius:4px;cursor:pointer;font-size:12px;">查看详情</button></div>';
+          }
+        }
         const popupContent = `
           <div style="min-width:150px">
             <strong>${s.name}</strong><br/>
             <span style="color:${color}">●</span> 状态：${s.status || '未知'}<br/>
-            最近上报：${s.last_audio_time || '—'}<br/>
-            <button onclick="window.playAudio(${s.id})" 
-              style="margin-top:8px;padding:4px 8px;background:#2563eb;color:white;border:none;border-radius:4px;cursor:pointer;">
-              ${playingSensorId === s.id ? '停止播放' : '播放音频'}
-            </button>
+            最近上报：${s.last_audio_time || '—'}
+            ${buttons}
           </div>
         `;
         marker.bindPopup(popupContent);
+
+        // 添加点击事件
+        marker.on('click', () => {
+          if (onSensorClick && isAbnormal && isAdmin) {
+            if (typeof window !== 'undefined') {
+              (window as any).lastClickedSensor = s;
+            }
+          }
+        });
+
+        // 监听弹窗内的按钮点击
+        marker.on('popupopen', () => {
+          const popup = marker.getPopup();
+          if (popup) {
+            const popupContent = popup.getElement();
+            if (popupContent) {
+              const assignBtn = popupContent.querySelector('.assign-worker-btn');
+              if (assignBtn) {
+                assignBtn.addEventListener('click', (e: Event) => {
+                  e.stopPropagation();
+                  if (typeof window !== 'undefined') {
+                    (window as any).lastClickedSensor = s;
+                    if (typeof (window as any).triggerAssignWorker === 'function') {
+                      (window as any).triggerAssignWorker(s.id);
+                    }
+                  }
+                });
+              }
+              const viewDetailsBtn = popupContent.querySelector('[data-view-details]');
+              if (viewDetailsBtn && onViewDetails) {
+                viewDetailsBtn.addEventListener('click', (e: Event) => {
+                  e.stopPropagation();
+                  onViewDetails(s.id);
+                });
+              }
+            }
+          }
+        });
+
         marker.addTo(layerGroup);
       });
 

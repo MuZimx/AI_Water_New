@@ -23,6 +23,7 @@ export interface User {
   role?: '工人' | '管理员' | string;
   full_name?: string | null;
   phone?: string | null;
+  worker_status?: string;
 }
 
 export interface LoginRequest {
@@ -231,9 +232,87 @@ export const API = {
     return response.success ? response.data : null;
   },
 
-  // 获取传感器最新音频
-  getSensorAudio: async (sensorId: number): Promise<{ url: string; filename: string }> => {
-    const response = await request<{ success: boolean; data: { url: string; filename: string } }>(`/sensors/${sensorId}/audio`);
-    return response.success ? response.data : { url: '', filename: '' };
+  // 获取工人列表
+  getWorkers: async (): Promise<User[]> => {
+    const response = await request<{ success: boolean; data: User[] }>('/workers');
+    return response.success ? response.data : [];
+  },
+
+  // 获取当前工人状态
+  getWorkerStatus: async (): Promise<{ status: string }> => {
+    const response = await request<{ success: boolean; data: { status: string } }>('/workers/my-status');
+    return response.success ? response.data : { status: '空闲' };
+  },
+
+  // 创建派工指令
+  createCommand: async (data: {
+    title: string;
+    content: string;
+    worker_ids: number[];
+    sensor_id?: number;
+    deadline?: string;
+  }): Promise<{ commandId: number; commandNumber: string }> => {
+    const response = await request<{ success: boolean; data: { commandId: number; commandNumber: string } }>('/commands', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (response.success) {
+      return { commandId: response.data.commandId, commandNumber: response.data.commandNumber };
+    }
+    throw new Error('创建指令失败');
+  },
+
+  // 获取收到的指令
+  getReceivedCommands: async (): Promise<any[]> => {
+    const response = await request<{ success: boolean; data: any[] }>('/commands/received');
+    return response.success ? response.data : [];
+  },
+
+  // 提交维修反馈（支持图片上传）
+  submitFeedback: async (commandId: number, feedback: string, photos?: File[], updateSensor?: boolean): Promise<any> => {
+    const formData = new FormData();
+    formData.append('feedback', feedback);
+
+    if (photos && photos.length > 0) {
+      photos.forEach((file) => {
+        formData.append(`photos`, file);
+      });
+    }
+
+    if (updateSensor) {
+      formData.append('update_sensor', 'true');
+    }
+
+    const token = localStorage.getItem('auth_token');
+    const url = `${API_BASE_URL}/commands/${commandId}/feedback`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.message || '提交失败');
+    }
+
+    return data;
+  },
+
+  // 获取指令详情（所有用户）
+  getCommandDetails: async (commandId: number): Promise<any[]> => {
+    const response = await request<{ success: boolean; data: any[] }>(`/commands/${commandId}/details`);
+    return response.success ? response.data : [];
+  },
+
+  // 标记指令为完成
+  completeCommand: async (commandId: number): Promise<void> => {
+    await request(`/commands/${commandId}/complete`, {
+      method: 'PUT',
+    });
   },
 };

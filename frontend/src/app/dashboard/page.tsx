@@ -3,24 +3,25 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Trash2, 
-  Waves, 
-  User, 
-  LogOut, 
-  Settings, 
-  Upload, 
+import {
+  Plus,
+  Search,
+  Trash2,
+  Waves,
+  User,
+  LogOut,
+  Settings,
+  Upload,
   FileAudio,
-  AlertTriangle,
   ChevronRight,
   RefreshCw,
   PlayCircle,
   Home,
   Bell,
-  Activity
+  Activity,
+  CheckSquare,
+  MapPin,
+  Send
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,10 +45,12 @@ import {
   DialogTrigger,
   DialogFooter
 } from '@/components/ui/dialog';
-import { API, type AudioFile, type User as UserType, RiskLevel } from '@/lib/api';
+import { API, type AudioFile, type User as UserType } from '@/lib/api';
 import { RiskBadge } from '@/components/risk-badge';
 import { AudioPlayer } from '@/components/audio-player';
 import { AIInterpretationTool } from '@/components/ai-interpretation-tool';
+import { WorkerNotifications } from '@/components/worker-notifications';
+import { SensorDetailsDialog } from '@/components/sensor-details-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -64,6 +67,18 @@ export default function DashboardPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
+  const [sensors, setSensors] = useState<any[]>([]);
+  const [workers, setWorkers] = useState<UserType[]>([]);
+  const [selectedSensor, setSelectedSensor] = useState<any>(null);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedWorkers, setSelectedWorkers] = useState<number[]>([]);
+  const [deadline, setDeadline] = useState('');
+  const [workerStatus, setWorkerStatus] = useState<{ status: string } | null>(null);
+  const [showTaskAlert, setShowTaskAlert] = useState(false);
+  const [currentCommand, setCurrentCommand] = useState<any | null>(null);
+  const [fromBannerMode, setFromBannerMode] = useState(false);
+  const [sensorDetailsOpen, setSensorDetailsOpen] = useState(false);
+  const [selectedSensorId, setSelectedSensorId] = useState<number | null>(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -85,12 +100,75 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [router]);
 
-  // load sensors on mount
+  // load sensors and workers on mount
   useEffect(() => {
     loadSensors();
-  }, []);
+    if (currentUser?.role === '管理员') {
+      loadWorkers();
+    }
+  }, [currentUser]);
 
-  const [sensors, setSensors] = useState<any[]>([]);
+  // 工人状态轮询
+  useEffect(() => {
+    if (currentUser?.role === '工人') {
+      const checkWorkerStatus = async () => {
+        try {
+          const status = await API.getWorkerStatus();
+          const prevStatus = workerStatus?.status;
+          setWorkerStatus(status);
+
+          // 检测到新任务（从空闲变为工作中）
+          if (prevStatus === '空闲' && status.status === '工作中') {
+            setShowTaskAlert(true);
+            // 播放提示音
+            const audio = new Audio('/notification.mp3');
+            audio.play().catch(() => {});
+          }
+
+          // 如果状态是工作中，加载当前任务信息
+          if (status.status === '工作中') {
+            const commands = await API.getReceivedCommands();
+            // 找到第一个未完成的任务
+            const pendingCommand = commands.find((cmd: any) => cmd.status !== '已完成' && cmd.status !== '已取消');
+            setCurrentCommand(pendingCommand || null);
+          } else {
+            setCurrentCommand(null);
+          }
+        } catch (error) {
+          console.error('获取工人状态失败', error);
+        }
+      };
+
+      checkWorkerStatus();
+      const interval = setInterval(checkWorkerStatus, 5000); // 5秒轮询一次
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, workerStatus]);
+
+  // 监听弹窗内按钮点击
+  useEffect(() => {
+    const handlePopupButtonClick = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('assign-worker-btn')) {
+        const sensorId = target.getAttribute('data-sensor-id');
+        const sensor = sensors.find(s => s.id === parseInt(sensorId || ''));
+        if (sensor && currentUser?.role === '管理员') {
+          setSelectedSensor(sensor);
+          setSelectedWorkers([]);
+          setDeadline('');
+          setAssignDialogOpen(true);
+        }
+      }
+    };
+
+    // 添加全局事件监听
+    document.addEventListener('click', handlePopupButtonClick);
+
+    return () => {
+      document.removeEventListener('click', handlePopupButtonClick);
+    };
+  }, [sensors, currentUser]);
+
   const loadSensors = async () => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}/api/sensors`);
@@ -98,6 +176,15 @@ export default function DashboardPage() {
       if (data && data.success) setSensors(data.data || []);
     } catch (e) {
       console.error('加载传感器失败', e);
+    }
+  };
+
+  const loadWorkers = async () => {
+    try {
+      const workersList = await API.getWorkers();
+      setWorkers(workersList);
+    } catch (e) {
+      console.error('加载工人列表失败', e);
     }
   };
 
@@ -173,6 +260,48 @@ export default function DashboardPage() {
     }
   };
 
+  const handleSensorClick = (sensor: any) => {
+    // 点击传感器时不直接打开派工对话框，而是让弹窗先显示
+    // 实际的派工通过点击弹窗内的按钮触发
+    if (currentUser?.role === '管理员' && (sensor.status === '严重漏水' || sensor.status === '轻微漏水')) {
+      // 可以在这里做一些预处理，如高亮等
+    }
+  };
+
+  const handleAssignWorker = async () => {
+    if (!selectedSensor || selectedWorkers.length === 0) {
+      toast({ variant: "destructive", title: "参数错误", description: "请选择至少一名工人" });
+      return;
+    }
+
+    try {
+      await API.createCommand({
+        title: `维修任务：${selectedSensor.name}`,
+        content: `检测到${selectedSensor.status}，请立即前往该传感器位置进行检查和维修。`,
+        worker_ids: selectedWorkers,
+        sensor_id: selectedSensor.id,
+        deadline: deadline || undefined,
+      });
+      toast({ title: "派工成功", description: `已向 ${selectedWorkers.length} 名工人发送维修通知` });
+      setAssignDialogOpen(false);
+      setSelectedSensor(null);
+      setSelectedWorkers([]);
+      setDeadline('');
+      // 刷新传感器数据以更新分配状态
+      loadSensors();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "派工失败", description: error.message || "请稍后重试" });
+    }
+  };
+
+  const toggleWorkerSelection = (workerId: number) => {
+    setSelectedWorkers(prev =>
+      prev.includes(workerId)
+        ? prev.filter(id => id !== workerId)
+        : [...prev, workerId]
+    );
+  };
+
   const filteredFiles = files.filter(f => {
     const matchesSearch = f.original_name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesTab = activeTab === 'all' ||
@@ -226,6 +355,45 @@ export default function DashboardPage() {
         </div>
       </header>
 
+      {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
+      {currentUser?.role === '工人' && workerStatus?.status === '工作中' && currentCommand && (
+        <div className="relative z-20 bg-gradient-to-r from-orange-500 to-amber-500 text-white border-b border-orange-600 shadow-lg">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center gap-4">
+              <div className="bg-white/20 p-3 rounded-full animate-pulse">
+                <Bell className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-lg">正在进行维修任务</p>
+                <p className="text-white/90 text-sm mt-1">{currentCommand.title}</p>
+                <p className="text-white/80 text-xs mt-1">{currentCommand.content}</p>
+              </div>
+              <Button
+                type="button"
+                onClick={(e) => {
+                  console.log('横幅按钮被点击');
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('切换前 activeTab:', activeTab);
+                  setActiveTab('tasks');
+                  setFromBannerMode(true);
+                  console.log('已设置fromBannerMode');
+                  // 延迟检查状态
+                  setTimeout(() => {
+                    console.log('切换后 activeTab (延迟检查):', activeTab);
+                  }, 100);
+                }}
+                variant="secondary"
+                className="bg-white text-orange-600 hover:bg-orange-50 pointer-events-auto relative z-10"
+              >
+                查看详情
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="container mx-auto p-4 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
         {/* 地图卡片（左上） */}
         <div className="lg:col-span-12">
@@ -235,7 +403,15 @@ export default function DashboardPage() {
               <CardDescription>显示城市中传感器位置信息与最新状态</CardDescription>
             </CardHeader>
             <CardContent>
-              <SensorMap sensors={sensors} />
+              <SensorMap
+                sensors={sensors}
+                onSensorClick={handleSensorClick}
+                isAdmin={currentUser?.role === '管理员'}
+                onViewDetails={(sensorId) => {
+                  setSelectedSensorId(sensorId);
+                  setSensorDetailsOpen(true);
+                }}
+              />
             </CardContent>
           </Card>
         </div>
@@ -299,17 +475,114 @@ export default function DashboardPage() {
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {/* 派工对话框（仅管理员可见） */}
+              <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+                <DialogContent className="sm:max-w-[500px] z-[10000]">
+                  <DialogHeader>
+                    <DialogTitle className="font-headline text-xl">分配维修工</DialogTitle>
+                    <DialogDescription>
+                      为 {selectedSensor?.name} 选择负责维修的工人
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    {/* 传感器信息 */}
+                    <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{selectedSensor?.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          selectedSensor?.status === '严重漏水' ? 'bg-red-100 text-red-700' :
+                          selectedSensor?.status === '轻微漏水' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-green-100 text-green-700'
+                        }`}>
+                          {selectedSensor?.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 工人选择 */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">选择工人（可多选）</label>
+                      <p className="text-xs text-muted-foreground">仅显示空闲状态的工人</p>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {workers.filter(w => w.worker_status === '空闲').length === 0 ? (
+                          <p className="text-sm text-muted-foreground text-center py-4">暂无空闲工人</p>
+                        ) : (
+                          workers.filter(w => w.worker_status === '空闲').map((worker) => (
+                          <div
+                            key={worker.id}
+                            onClick={() => toggleWorkerSelection(worker.id)}
+                            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              selectedWorkers.includes(worker.id)
+                                ? 'border-primary bg-primary/5'
+                                : 'border-muted hover:border-primary/30'
+                            }`}
+                          >
+                            <div className={`h-5 w-5 rounded border-2 flex items-center justify-center ${
+                              selectedWorkers.includes(worker.id)
+                                ? 'bg-primary border-primary'
+                                : 'border-muted-foreground'
+                            }`}>
+                              {selectedWorkers.includes(worker.id) && (
+                                <CheckSquare className="h-3 w-3 text-white" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium">{worker.full_name || worker.username}</p>
+                                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] rounded-full">空闲</span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">{worker.phone || '未设置电话'}</p>
+                            </div>
+                          </div>
+                        )))}
+                      </div>
+                    </div>
+
+                    {/* 截止时间 */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">截止时间（可选）</label>
+                      <Input
+                        type="datetime-local"
+                        value={deadline}
+                        onChange={(e) => setDeadline(e.target.value)}
+                        className="bg-white"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setAssignDialogOpen(false)}>
+                      取消
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleAssignWorker}
+                      disabled={selectedWorkers.length === 0}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      发送指令
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
 
-          <Tabs defaultValue="all" className="w-full" onValueChange={setActiveTab}>
-            <TabsList className="grid w-full sm:w-[400px] grid-cols-3 bg-muted/50 p-1">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full sm:w-[400px] grid-cols-4 bg-muted/50 p-1">
               <TabsTrigger value="all" className="text-xs sm:text-sm">所有样本</TabsTrigger>
               <TabsTrigger value="high" className="text-xs sm:text-sm text-destructive data-[state=active]:text-destructive">高风险</TabsTrigger>
               <TabsTrigger value="processing" className="text-xs sm:text-sm">分析中</TabsTrigger>
+              {currentUser?.role === '工人' && (
+                <TabsTrigger value="tasks" className="text-xs sm:text-sm">维修任务</TabsTrigger>
+              )}
             </TabsList>
-            
-            <TabsContent value={activeTab} className="mt-6 space-y-4">
+
+            <TabsContent value="all" className="mt-6 space-y-4">
               {filteredFiles.length === 0 ? (
                 <Card className="border-dashed border-2 bg-transparent">
                   <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -323,8 +596,8 @@ export default function DashboardPage() {
               ) : (
                 <div className="grid gap-3">
                   {filteredFiles.map((file) => (
-                    <Card 
-                      key={file.id} 
+                    <Card
+                      key={file.id}
                       className={cn(
                         "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm",
                         selectedFile?.id === file.id ? 'border-primary ring-1 ring-primary/20 shadow-md scale-[1.01]' : 'hover:border-primary/20'
@@ -371,6 +644,124 @@ export default function DashboardPage() {
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="high" className="mt-6 space-y-4">
+              {filteredFiles.length === 0 ? (
+                <Card className="border-dashed border-2 bg-transparent">
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <FileAudio className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                    <h3 className="font-headline text-lg font-semibold text-muted-foreground">暂无高风险记录</h3>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {filteredFiles.map((file) => (
+                    <Card
+                      key={file.id}
+                      className={cn(
+                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm",
+                        selectedFile?.id === file.id ? 'border-primary ring-1 ring-primary/20 shadow-md scale-[1.01]' : 'hover:border-primary/20'
+                      )}
+                      onClick={() => setSelectedFile(file)}
+                    >
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <div className={cn(
+                          "p-3 rounded-xl flex-shrink-0",
+                          file.status === 'processing' ? 'bg-secondary/10' : 'bg-destructive/10'
+                        )}>
+                          {file.status === 'processing' ? (
+                            <RefreshCw className="h-6 w-6 text-secondary animate-spin" />
+                          ) : (
+                            <FileAudio className="h-6 w-6 text-destructive" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium truncate text-sm sm:text-base">{file.original_name}</h4>
+                            <RiskBadge level={file.risk_level} className="text-[10px]" />
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
+                            <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
+                          </div>
+                        </div>
+
+                        <div className="hidden sm:flex items-center gap-2">
+                           <ChevronRight className={cn("h-5 w-5 transition-transform", selectedFile?.id === file.id ? 'rotate-90' : 'text-muted-foreground')} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="processing" className="mt-6 space-y-4">
+              {filteredFiles.length === 0 ? (
+                <Card className="border-dashed border-2 bg-transparent">
+                  <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                    <FileAudio className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                    <h3 className="font-headline text-lg font-semibold text-muted-foreground">暂无分析中记录</h3>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-3">
+                  {filteredFiles.map((file) => (
+                    <Card
+                      key={file.id}
+                      className={cn(
+                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm",
+                        selectedFile?.id === file.id ? 'border-primary ring-1 ring-primary/20 shadow-md scale-[1.01]' : 'hover:border-primary/20'
+                      )}
+                      onClick={() => setSelectedFile(file)}
+                    >
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-secondary/10 flex-shrink-0">
+                          <RefreshCw className="h-6 w-6 text-secondary animate-spin" />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium truncate text-sm sm:text-base">{file.original_name}</h4>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
+                            <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
+                            <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                            <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {currentUser?.role === '工人' && (
+              <TabsContent value="tasks" className="mt-6 space-y-4">
+                <>
+                  {fromBannerMode && (
+                    <div className="mb-4">
+                      <Button
+                        variant="ghost"
+                        onClick={() => setFromBannerMode(false)}
+                        className="text-sm"
+                      >
+                        ← 返回任务列表
+                      </Button>
+                    </div>
+                  )}
+                  <WorkerNotifications
+                    currentUser={currentUser}
+                    onStatusChange={() => {
+                      // 刷新工人状态
+                      API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
+                    }}
+                    fromBanner={fromBannerMode}
+                  />
+                </>
+              </TabsContent>
+            )}
           </Tabs>
         </div>
 
@@ -469,11 +860,11 @@ export default function DashboardPage() {
 
       {/* 底部导航栏 (仅手机端) - 类安卓体验 */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-lg border-t border-border px-6 py-3 flex justify-between items-center shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-        <button onClick={() => setActiveTab('all')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'all' ? 'text-primary' : 'text-muted-foreground')}>
+        <button type="button" onClick={() => { setActiveTab('all'); setFromBannerMode(false); }} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'all' ? 'text-primary' : 'text-muted-foreground')}>
           <Home className="h-5 w-5" />
           <span className="text-[10px] font-medium">概览</span>
         </button>
-        <button onClick={() => setActiveTab('high')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'high' ? 'text-destructive' : 'text-muted-foreground')}>
+        <button type="button" onClick={() => { setActiveTab('high'); setFromBannerMode(false); }} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'high' ? 'text-destructive' : 'text-muted-foreground')}>
           <Bell className="h-5 w-5" />
           <span className="text-[10px] font-medium">预警</span>
         </button>
@@ -485,15 +876,77 @@ export default function DashboardPage() {
         >
            <Plus className="h-6 w-6" />
         </button>
-        <button onClick={() => setActiveTab('processing')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'processing' ? 'text-secondary' : 'text-muted-foreground')}>
+        <button type="button" onClick={() => setActiveTab('processing')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'processing' ? 'text-secondary' : 'text-muted-foreground')}>
           <Activity className="h-5 w-5" />
           <span className="text-[10px] font-medium">分析</span>
         </button>
-        <button onClick={() => router.push('/profile')} className="flex flex-col items-center gap-1 text-muted-foreground">
+        <button type="button" onClick={() => router.push('/profile')} className="flex flex-col items-center gap-1 text-muted-foreground">
           <User className="h-5 w-5" />
           <span className="text-[10px] font-medium">设置</span>
         </button>
       </div>
+
+      {/* 新任务提醒弹窗 (仅工人) */}
+      {currentUser?.role === '工人' && showTaskAlert && (
+        <Dialog open={showTaskAlert} onOpenChange={setShowTaskAlert}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                <div className="bg-amber-100 p-2 rounded-full">
+                  <Bell className="h-6 w-6 text-amber-600 animate-bounce" />
+                </div>
+                新任务通知
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <p className="text-amber-900 font-medium">
+                  您有新的维修任务！
+                </p>
+                <p className="text-amber-700 text-sm mt-2">
+                  管理员已为您分配新的维修任务，请及时查看详情并处理。
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className={`h-2 w-2 rounded-full ${workerStatus?.status === '工作中' ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
+                <span>当前状态: {workerStatus?.status || '空闲'}</span>
+              </div>
+            </div>
+            <DialogFooter className="flex gap-2 !flex-row !justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowTaskAlert(false)}
+                className="pointer-events-auto"
+              >
+                稍后查看
+              </Button>
+              <Button
+                type="button"
+                onClick={(e) => {
+                  console.log('点击查看详情按钮', e);
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowTaskAlert(false);
+                  setActiveTab('tasks');
+                  setFromBannerMode(true);
+                  console.log('设置完成');
+                }}
+                className="bg-primary hover:bg-primary/90 pointer-events-auto"
+              >
+                查看详情
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* 传感器详情对话框 */}
+      <SensorDetailsDialog
+        open={sensorDetailsOpen}
+        onOpenChange={setSensorDetailsOpen}
+        sensorId={selectedSensorId}
+      />
     </div>
   );
 }

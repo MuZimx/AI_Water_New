@@ -49,6 +49,9 @@ venv/
 *.db
 *.sqlite
 *.sqlite3
+backend/db/*.db
+backend/db/*.sqlite
+backend/db/*.sqlite3
 
 # Audio files
 backend/uploads/*.mp3
