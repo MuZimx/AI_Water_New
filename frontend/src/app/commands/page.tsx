@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
-  User,
+
   FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -86,10 +86,8 @@ export default function CommandsPage() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case '已接收':
+      case '未执行':
         return <Clock className="h-4 w-4 text-yellow-500" />;
-      case '执行中':
-        return <AlertCircle className="h-4 w-4 text-blue-500" />;
       case '已完成':
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       default:
@@ -99,10 +97,8 @@ export default function CommandsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case '已接收':
+      case '未执行':
         return 'bg-yellow-100 text-yellow-800';
-      case '执行中':
-        return 'bg-blue-100 text-blue-800';
       case '已完成':
         return 'bg-green-100 text-green-800';
       default:
@@ -146,8 +142,7 @@ export default function CommandsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部状态</SelectItem>
-              <SelectItem value="已接收">已接收</SelectItem>
-              <SelectItem value="执行中">执行中</SelectItem>
+              <SelectItem value="未执行">未执行</SelectItem>
               <SelectItem value="已完成">已完成</SelectItem>
             </SelectContent>
           </Select>
@@ -198,7 +193,6 @@ export default function CommandsPage() {
                       </div>
                       <div className="flex items-center text-sm text-muted-foreground gap-4">
                         <div className="flex items-center gap-1">
-                          <User className="h-3 w-3" />
                           <span>{command.admin_name}</span>
                         </div>
                         <div className="flex items-center gap-1">
