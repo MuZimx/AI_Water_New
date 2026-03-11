@@ -77,8 +77,6 @@ export default function DashboardPage() {
   const [selectedWorkers, setSelectedWorkers] = useState<number[]>([]);
   const [deadline, setDeadline] = useState('');
   const [workerStatus, setWorkerStatus] = useState<{ status: string } | null>(null);
-  const [showTaskAlert, setShowTaskAlert] = useState(false);
-  const [currentCommand, setCurrentCommand] = useState<any | null>(null);
   const [fromBannerMode, setFromBannerMode] = useState(false);
   const [sensorDetailsOpen, setSensorDetailsOpen] = useState(false);
   const [selectedSensorId, setSelectedSensorId] = useState<number | null>(null);
@@ -141,26 +139,7 @@ export default function DashboardPage() {
       const checkWorkerStatus = async () => {
         try {
           const status = await API.getWorkerStatus();
-          const prevStatus = workerStatus?.status;
           setWorkerStatus(status);
-
-          // 检测到新任务（从空闲变为工作中）
-          if (prevStatus === '空闲' && status.status === '工作中') {
-            setShowTaskAlert(true);
-            // 播放提示音
-            const audio = new Audio('/notification.mp3');
-            audio.play().catch(() => {});
-          }
-
-          // 如果状态是工作中，加载当前任务信息
-          if (status.status === '工作中') {
-            const commands = await API.getReceivedCommands();
-            // 找到第一个未完成的任务
-            const pendingCommand = commands.find((cmd: any) => cmd.status !== '已完成' && cmd.status !== '已取消');
-            setCurrentCommand(pendingCommand || null);
-          } else {
-            setCurrentCommand(null);
-          }
         } catch (error) {
           console.error('获取工人状态失败', error);
         }
@@ -170,7 +149,7 @@ export default function DashboardPage() {
       const interval = setInterval(checkWorkerStatus, 5000); // 5秒轮询一次
       return () => clearInterval(interval);
     }
-  }, [currentUser, workerStatus]);
+  }, [currentUser]);
 
   // 注册全局函数供地图弹窗调用
   useEffect(() => {
@@ -330,7 +309,8 @@ export default function DashboardPage() {
   const handleResetMaintenance = async () => {
     setIsResetting(true);
     try {
-      await API.resetMaintenance();
+      // 某些版本的 API 可能不存在 resetMaintenance，使用 any 并可选链以避免类型错误
+      await (API as any).resetMaintenance?.();
       toast({ title: "重置成功", description: "所有维修记录已删除，工人状态已恢复" });
       setResetDialogOpen(false);
       // 刷新数据
@@ -428,7 +408,7 @@ export default function DashboardPage() {
       )}
 
       {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
-      {currentUser?.role === '工人' && workerStatus?.status === '工作中' && currentCommand && (
+      {currentUser?.role === '工人' && workerStatus?.status === '工作中' && (
         <div className="relative z-20 bg-gradient-to-r from-orange-500 to-amber-500 text-white border-b border-orange-600 shadow-lg">
           <div className="container mx-auto px-4 py-4">
             <div className="flex items-center gap-4">
@@ -437,8 +417,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex-1">
                 <p className="font-bold text-lg">正在进行维修任务</p>
-                <p className="text-white/90 text-sm mt-1">{currentCommand.title}</p>
-                <p className="text-white/80 text-xs mt-1">{currentCommand.content}</p>
+                <p className="text-white/90 text-sm mt-1">请查看任务详情并处理</p>
               </div>
               <Button
                 type="button"
@@ -962,61 +941,6 @@ export default function DashboardPage() {
           <span className="text-[10px] font-medium">设置</span>
         </button>
       </div>
-
-      {/* 新任务提醒弹窗 (仅工人) */}
-      {currentUser?.role === '工人' && showTaskAlert && (
-        <Dialog open={showTaskAlert} onOpenChange={setShowTaskAlert}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-xl">
-                <div className="bg-amber-100 p-2 rounded-full">
-                  <Bell className="h-6 w-6 text-amber-600 animate-bounce" />
-                </div>
-                新任务通知
-              </DialogTitle>
-            </DialogHeader>
-            <div className="py-4 space-y-4">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                <p className="text-amber-900 font-medium">
-                  您有新的维修任务！
-                </p>
-                <p className="text-amber-700 text-sm mt-2">
-                  管理员已为您分配新的维修任务，请及时查看详情并处理。
-                </p>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className={`h-2 w-2 rounded-full ${workerStatus?.status === '工作中' ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
-                <span>当前状态: {workerStatus?.status || '空闲'}</span>
-              </div>
-            </div>
-            <DialogFooter className="flex gap-2 !flex-row !justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowTaskAlert(false)}
-                className="pointer-events-auto"
-              >
-                稍后查看
-              </Button>
-              <Button
-                type="button"
-                onClick={(e) => {
-                  console.log('点击查看详情按钮', e);
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setShowTaskAlert(false);
-                  setActiveTab('tasks');
-                  setFromBannerMode(true);
-                  console.log('设置完成');
-                }}
-                className="bg-primary hover:bg-primary/90 pointer-events-auto"
-              >
-                查看详情
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {/* 重置维修记录确认对话框 */}
       <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>

@@ -5,18 +5,14 @@ import { useRouter } from 'next/navigation';
 import {
   Plus,
   Search,
-  Filter,
   ChevronRight,
   Clock,
   CheckCircle2,
-  AlertCircle,
-  Calendar,
-
-  FileText
+  Calendar
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { API, type User } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -67,8 +63,16 @@ export default function CommandsPage() {
       if (statusFilter !== 'all') {
         params.status = statusFilter;
       }
-      const { data } = await API.getCommands(params);
-      setCommands(data);
+
+      let commandData;
+      if (currentUser?.role === '工人') {
+        commandData = await API.getReceivedCommands();
+      } else {
+        const { data } = await API.getCommands(params);
+        commandData = data;
+      }
+
+      setCommands(commandData);
     } catch (error: any) {
       toast({ variant: "destructive", title: "加载失败", description: error.message || "无法加载命令" });
     } finally {
