@@ -14,9 +14,12 @@ model audio_files {
   size          Int
   upload_time   DateTime? @default(now())
   user_id       Int?
+  sensor_id     Int?
   risk_level    String?   @default("未检测")
   confidence    Float?    @default(0.0)
+  detect_time   DateTime?
   users         users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sensors       sensors?  @relation(fields: [sensor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model command_attachments {
@@ -67,11 +70,24 @@ model commands {
   content             String
   sensor_id           Int?
   deadline            DateTime?
+  status              String?               @default("已发布")
   created_at          DateTime?             @default(now())
   command_attachments command_attachments[]
   command_feedbacks   command_feedbacks[]
   command_recipients  command_recipients[]
   users               users                 @relation(fields: [admin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sensors             sensors?              @relation(fields: [sensor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model sensors {
+  id              Int          @id @default(autoincrement())
+  name            String
+  latitude        Float
+  longitude       Float
+  status          String?      @default("正常")
+  last_audio_time DateTime?
+  audio_files     audio_files[]
+  commands        commands[]
 }
 
 model maintenance_photos {
