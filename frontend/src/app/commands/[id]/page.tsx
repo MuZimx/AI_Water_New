@@ -237,16 +237,12 @@ export default function CommandDetailPage() {
         {/* 基本信息 */}
         <Card className="mb-6">
           <CardHeader>
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle className="text-xl">{command.title}</CardTitle>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className={`px-3 py-1 text-sm rounded-full ${getStatusColor(command.recipient_status || '未执行')}`}>
-                    {getStatusIcon(command.recipient_status || '未执行')}
-                    <span className="ml-1">{command.recipient_status || '未执行'}</span>
-                  </span>
-                </div>
-              </div>
+            <div className="flex justify-between items-start justify-center">
+              <CardTitle className="text-xl">{command.title}</CardTitle>
+              <span className={`flex items-center px-3 py-1 text-sm rounded-full ${getStatusColor(command.recipient_status || '未执行')}`}>
+                {getStatusIcon(command.recipient_status || '未执行')}
+                <span className="ml-1">{command.recipient_status || '未执行'}</span>
+              </span>
               {currentUser?.role !== '管理员' && (
                 <div className="w-[200px]">
                   <Select value={status} onValueChange={setStatus}>
@@ -345,7 +341,7 @@ export default function CommandDetailPage() {
                       <User className="h-4 w-4 text-primary" />
                       <span>{recipient.username}</span>
                     </div>
-                    <span className={`px-3 py-1 text-sm rounded-full ${getStatusColor(recipient.status)}`}>
+                    <span className={`flex items-center px-3 py-1 text-sm rounded-full ${getStatusColor(recipient.status)}`}>
                       {getStatusIcon(recipient.status)}
                       <span className="ml-1">{recipient.status}</span>
                     </span>
