@@ -277,12 +277,17 @@ export const API = {
   },
 
   // 信息反馈与命令指示系统 API
-  createCommand: async (data: { title: string; content: string; deadline?: string }): Promise<{ id: number }> => {
+  createCommand: async (data: { title: string; content: string; worker_ids: number[]; sensor_id?: number; deadline?: string }): Promise<{ id: number }> => {
     const response = await request<{ success: boolean; data: { id: number } }>('/commands', {
       method: 'POST',
       body: JSON.stringify(data),
     });
     return response.data;
+  },
+
+  getSensors: async (): Promise<Array<{ id: number; name: string; status?: string }>> => {
+    const response = await request<{ success: boolean; data: Array<{ id: number; name: string; status?: string }> }>('/sensors');
+    return response.success ? response.data : [];
   },
 
   uploadCommandAttachments: async (id: number, attachments: File[]): Promise<Array<{ filename: string; originalName: string }>> => {

@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Save,
-  FileText,
-  Calendar,
-  User
+  FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +22,12 @@ interface Worker {
   full_name: string | null;
 }
 
+interface Sensor {
+  id: number;
+  name: string;
+  status?: string;
+}
+
 export default function CreateCommandPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -31,6 +35,10 @@ export default function CreateCommandPage() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [selectedWorkers, setSelectedWorkers] = useState<number[]>([]);
+  const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [selectedSensorId, setSelectedSensorId] = useState<number | undefined>(undefined);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -51,12 +59,22 @@ export default function CreateCommandPage() {
         return;
       }
       setCurrentUser(user);
+      const [workersData, sensorsData] = await Promise.all([
+        API.getWorkers(),
+        API.getSensors()
+      ]);
+      setWorkers(workersData as Worker[]);
+      setSensors(sensorsData as Sensor[]);
     } catch {
       router.push('/');
     }
   };
 
-
+  const toggleWorker = (workerId: number) => {
+    setSelectedWorkers(prev =>
+      prev.includes(workerId) ? prev.filter(id => id !== workerId) : [...prev, workerId]
+    );
+  };
 
   const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -72,8 +90,8 @@ export default function CreateCommandPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title || !content) {
-      toast({ variant: "destructive", title: "请填写必填项", description: "标题和内容为必填项" });
+    if (!title || !content || selectedWorkers.length === 0) {
+      toast({ variant: "destructive", title: "请填写必填项", description: "标题、内容和执行工人为必填项" });
       return;
     }
 
@@ -83,6 +101,8 @@ export default function CreateCommandPage() {
       const { id } = await API.createCommand({
         title,
         content,
+        worker_ids: selectedWorkers,
+        sensor_id: selectedSensorId,
         deadline: deadline || undefined
       });
 
@@ -159,6 +179,43 @@ export default function CreateCommandPage() {
                   value={deadline}
                   onChange={(e) => setDeadline(e.target.value)}
                 />
+              </div>
+
+              {/* 关联传感器（可选） */}
+              <div className="space-y-2">
+                <Label htmlFor="sensor">关联传感器（可选）</Label>
+                <select
+                  id="sensor"
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={selectedSensorId ?? ''}
+                  onChange={(e) => setSelectedSensorId(e.target.value ? Number(e.target.value) : undefined)}
+                >
+                  <option value="">不关联传感器</option>
+                  {sensors.map(sensor => (
+                    <option key={sensor.id} value={sensor.id}>{sensor.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 执行工人（必选） */}
+              <div className="space-y-3">
+                <Label>执行工人（必选）</Label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {workers.map(worker => (
+                    <label key={worker.id} className="flex items-center gap-2 border rounded-md p-2 cursor-pointer">
+                      <Checkbox
+                        checked={selectedWorkers.includes(worker.id)}
+                        onCheckedChange={() => toggleWorker(worker.id)}
+                      />
+                      <span className="text-sm">
+                        {worker.full_name || worker.username}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {workers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">暂无可选工人</p>
+                )}
               </div>
 
               {/* 附件上传 */}
