@@ -102,7 +102,7 @@ export default function LoginPage() {
               操作员访问
             </CardTitle>
             <CardDescription>
-              输入您的凭据以访问异常检测控制面板。
+              登录以访问智能水务仪表盘。
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -121,7 +121,7 @@ export default function LoginPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">安全令牌</Label>
+                <Label htmlFor="password">密码</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -144,7 +144,7 @@ export default function LoginPage() {
           </form>
         </Card>
         <div className="flex items-center justify-center mt-4">
-          <a href="/register" className="text-sm text-primary hover:underline">没有账号？注册</a>
+          没有账号？<a href="/register" className="text-sm text-primary hover:underline">注册</a>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
