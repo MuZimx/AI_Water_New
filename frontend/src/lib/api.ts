@@ -342,12 +342,12 @@ export const API = {
 
   // 工人状态相关 API
   getWorkerStatus: async (): Promise<{ status: string; currentTask?: any }> => {
-    const response = await request<{ success: boolean; data: { status: string; currentTask?: any } }>('/workers/status');
+    const response = await request<{ success: boolean; data: { status: string; currentTask?: any } }>('/workers/my-status');
     return response.data;
   },
 
   updateWorkerStatus: async (status: string): Promise<void> => {
-    await request<{ success: boolean }>('/workers/status', {
+    await request<{ success: boolean }>('/workers/my-status', {
       method: 'PUT',
       body: JSON.stringify({ status }),
     });
