@@ -75,7 +75,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
 
   const loadCommands = async () => {
     try {
-      const commandsData = await API.getReceivedCommands();
+      const commandsData = await (API as any).getReceivedCommands();
       setCommands(commandsData);
     } catch (error) {
       console.error('加载指令失败:', error);

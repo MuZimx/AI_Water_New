@@ -54,16 +54,25 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
 
       if (data.success && data.data) {
         // 对每个指令获取详情
-        const allFeedbacks = await Promise.all(
-          data.data.map(async (cmd: any) => {
-            const details = await API.getCommandDetails(cmd.id);
-            return details.map((d: any) => ({
-              ...d,
-              photos: d.photos || []
-            }));
-          })
-        );
-        setFeedbacks(allFeedbacks.flat());
+                const allFeedbacks = await Promise.all(
+                  data.data.map(async (cmd: any) => {
+                    // 直接使用 fetch 请求单个指令详情（后端应提供 GET /api/commands/:id）
+                    const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000';
+                    const res = await fetch(`${base}/api/commands/${cmd.id}`, {
+                      headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                      }
+                    });
+                    const detailsResp = await res.json();
+                    // 兼容后端返回单个对象或数组的情况，最终保证返回数组
+                    const details = detailsResp?.data ? (Array.isArray(detailsResp.data) ? detailsResp.data : [detailsResp.data]) : [];
+                    return details.map((d: any) => ({
+                      ...d,
+                      photos: d.photos || []
+                    }));
+                  })
+                );
+                setFeedbacks(allFeedbacks.flat());
       }
     } catch (error) {
       console.error('加载反馈失败:', error);
