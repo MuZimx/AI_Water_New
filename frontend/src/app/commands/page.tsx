@@ -189,13 +189,13 @@ export default function CommandsPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-lg">{command.title}</h3>
                         {command.recipient_status && (
-                          <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(command.recipient_status)}`}>
+                          <span className={`flex items-center px-2 py-0.5 text-xs rounded-full ${getStatusColor(command.recipient_status)}`}>
                             {getStatusIcon(command.recipient_status)}
                             <span className="ml-1">{command.recipient_status}</span>
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center text-sm text-muted-foreground gap-4">
+                      <div className="flex items-center text-sm text-muted-foreground gap-4 content-start">
                         <div className="flex items-center gap-1">
                           <span>{command.admin_name}</span>
                         </div>

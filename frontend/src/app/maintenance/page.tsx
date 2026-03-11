@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { API, type User } from '@/lib/api';
+import { API, type User as TUser } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -37,7 +37,7 @@ interface MaintenanceRecord {
 export default function MaintenancePage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<TUser | null>(null);
   const [records, setRecords] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -179,7 +179,7 @@ export default function MaintenancePage() {
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <h3 className="font-semibold text-lg">{record.title}</h3>
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusColor(record.status)}`}>
+                        <span className={`flex items-center px-2 py-0.5 text-xs rounded-full ${getStatusColor(record.status)}`}>
                           {getStatusIcon(record.status)}
                           <span className="ml-1">{record.status}</span>
                         </span>
