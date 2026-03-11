@@ -4,11 +4,13 @@
   "description": "智慧水务 管理系统的后端服务",
   "main": "server.js",
   "scripts": {
-    "dev": "nodemon server.js",
-    "start": "node server.js",
-    "start:prod": "node server.js",
+    "dev": "npm run prisma:sync && nodemon server.js",
+    "start": "npm run prisma:sync && node server.js",
+    "start:prod": "npm run prisma:sync && node server.js",
     "prisma:pull": "prisma db pull --schema prisma/schema.prisma",
-    "prisma:generate": "prisma generate --schema prisma/schema.prisma"
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema prisma/schema.prisma",
+    "prisma:sync": "npm run prisma:push && npm run prisma:generate"
   },
   "keywords": [
     "express",

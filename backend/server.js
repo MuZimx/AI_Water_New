@@ -187,12 +187,21 @@ async function initializeDefaultSensors() {
       { id: 13, name: '传感器-秦淮区-013', latitude: 32.03, longitude: 118.77, status: '正常' }
     ];
 
-    await prisma.sensors.createMany({
-      data: defaultSensors,
-      skipDuplicates: true
-    });
+    await prisma.$transaction(
+      defaultSensors.map(sensor =>
+        prisma.sensors.upsert({
+          where: { id: sensor.id },
+          update: {},
+          create: sensor
+        })
+      )
+    );
     console.log('已插入默认传感器数据');
   } catch (error) {
+    if (error && error.code === 'P2021') {
+      console.error('初始化默认传感器数据失败: 数据表不存在，请先执行 npm run prisma:sync');
+      return;
+    }
     console.error('初始化默认传感器数据失败:', error.message);
   }
 }
@@ -1042,7 +1051,8 @@ app.get('/api/commands', authenticateToken, async (req, res) => {
 // 工人提交维修反馈（支持图片上传）
 app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosUpload.array('photos', 5), async (req, res) => {
   const { id } = req.params;
-  const { feedback, update_sensor } = req.body;
+  const { feedback, content, update_sensor } = req.body;
+  const feedbackText = (feedback || content || '').trim();
 
   if (req.user.role !== '工人') {
     return res.status(403).json({ success: false, message: '权限不足' });
@@ -1056,6 +1066,7 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
 
   try {
     const commandId = parseInt(id, 10);
+    let feedbackId = null;
     await prisma.$transaction(async (tx) => {
       const command = await tx.commands.findUnique({
         where: { id: commandId },
@@ -1083,12 +1094,42 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
       await tx.users.update({ where: { id: req.user.id }, data: { worker_status: '空闲' } });
       await tx.commands.update({ where: { id: commandId }, data: { status: '已完成' } });
 
+      if (feedbackText) {
+        const existingFeedback = await tx.command_feedbacks.findFirst({
+          where: { command_id: commandId, user_id: req.user.id },
+          select: { id: true }
+        });
+
+        if (existingFeedback) {
+          feedbackId = existingFeedback.id;
+        } else {
+          const createdFeedback = await tx.command_feedbacks.create({
+            data: {
+              command_id: commandId,
+              user_id: req.user.id,
+              content: feedbackText
+            }
+          });
+          feedbackId = createdFeedback.id;
+        }
+
+        if (feedbackId && req.files && Array.isArray(req.files) && req.files.length > 0) {
+          await tx.command_feedback_photos.createMany({
+            data: req.files.map(file => ({
+              feedback_id: feedbackId,
+              filename: file.filename,
+              original_name: file.originalname
+            }))
+          });
+        }
+      }
+
       if (update_sensor === 'true' && command.sensor_id) {
         await tx.sensors.update({ where: { id: command.sensor_id }, data: { status: '正常' } });
       }
     });
 
-    res.json({ success: true, message: '反馈提交成功', photos: photoUrls });
+    res.json({ success: true, message: '反馈提交成功', photos: photoUrls, feedbackId });
   } catch (error) {
     if (error.message === 'NOT_FOUND') {
       return res.status(404).json({ success: false, message: '指令不存在' });
@@ -1634,47 +1675,6 @@ app.put('/api/commands/:id/status', authenticateToken, async (req, res) => {
     res.json({ success: true, message: '状态更新成功' });
   } catch (error) {
     return res.status(500).json({ success: false, message: '更新状态失败' });
-  }
-});
-
-// 提交命令反馈
-app.post('/api/commands/:id/feedback', authenticateToken, async (req, res) => {
-  const commandId = parseInt(req.params.id, 10);
-  const { content } = req.body;
-  const userId = req.user.id;
-
-  if (!content) {
-    return res.status(400).json({ success: false, message: '反馈内容为必填项' });
-  }
-
-  try {
-    const recipient = await prisma.command_recipients.findFirst({
-      where: { command_id: commandId, user_id: userId },
-      select: { id: true }
-    });
-    if (!recipient) {
-      return res.status(404).json({ success: false, message: '命令不存在或无权限' });
-    }
-
-    const existingFeedback = await prisma.command_feedbacks.findFirst({
-      where: { command_id: commandId, user_id: userId },
-      select: { id: true }
-    });
-    if (existingFeedback) {
-      return res.status(400).json({ success: false, message: '已提交过反馈' });
-    }
-
-    const created = await prisma.command_feedbacks.create({
-      data: { command_id: commandId, user_id: userId, content }
-    });
-
-    res.status(201).json({
-      success: true,
-      message: '反馈提交成功',
-      data: { id: created.id }
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: '提交反馈失败' });
   }
 });
 
