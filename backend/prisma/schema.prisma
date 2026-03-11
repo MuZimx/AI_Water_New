@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model audio_files {
+  id            Int       @id @default(autoincrement())
+  filename      String
+  original_name String
+  mimetype      String
+  size          Int
+  upload_time   DateTime? @default(now())
+  user_id       Int?
+  risk_level    String?   @default("未检测")
+  confidence    Float?    @default(0.0)
+  users         users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model command_attachments {
+  id            Int       @id @default(autoincrement())
+  command_id    Int
+  filename      String
+  original_name String
+  upload_time   DateTime? @default(now())
+  commands      commands  @relation(fields: [command_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model command_feedback_photos {
+  id                Int               @id @default(autoincrement())
+  feedback_id       Int
+  filename          String
+  original_name     String
+  upload_time       DateTime?         @default(now())
+  command_feedbacks command_feedbacks @relation(fields: [feedback_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model command_feedbacks {
+  id                      Int                       @id @default(autoincrement())
+  command_id              Int
+  user_id                 Int
+  content                 String
+  created_at              DateTime?                 @default(now())
+  command_feedback_photos command_feedback_photos[]
+  users                   users                     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  commands                commands                  @relation(fields: [command_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model command_recipients {
+  id           Int       @id @default(autoincrement())
+  command_id   Int
+  user_id      Int
+  status       String?   @default("未执行")
+  read_at      DateTime?
+  completed_at DateTime?
+  users        users     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  commands     commands  @relation(fields: [command_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model commands {
+  id                  Int                   @id @default(autoincrement())
+  command_number      String?               @unique(map: "sqlite_autoindex_commands_1")
+  admin_id            Int
+  title               String
+  content             String
+  sensor_id           Int?
+  deadline            DateTime?
+  created_at          DateTime?             @default(now())
+  command_attachments command_attachments[]
+  command_feedbacks   command_feedbacks[]
+  command_recipients  command_recipients[]
+  users               users                 @relation(fields: [admin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model maintenance_photos {
+  id                  Int                 @id @default(autoincrement())
+  maintenance_id      Int
+  filename            String
+  original_name       String
+  upload_time         DateTime?           @default(now())
+  maintenance_records maintenance_records @relation(fields: [maintenance_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model maintenance_records {
+  id                  Int                   @id @default(autoincrement())
+  user_id             Int
+  title               String
+  content             String
+  status              String?               @default("未读")
+  created_at          DateTime?             @default(now())
+  updated_at          DateTime?             @default(now())
+  maintenance_photos  maintenance_photos[]
+  users               users                 @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  maintenance_sensors maintenance_sensors[]
+}
+
+model maintenance_sensors {
+  id                  Int                 @id @default(autoincrement())
+  maintenance_id      Int
+  sensor_id           Int
+  sensor_name         String
+  maintenance_records maintenance_records @relation(fields: [maintenance_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model users {
+  id                  Int                   @id @default(autoincrement())
+  username            String                @unique(map: "sqlite_autoindex_users_1")
+  password            String
+  role                String?               @default("工人")
+  full_name           String?
+  phone               String?
+  worker_status       String?               @default("空闲")
+  created_at          DateTime?             @default(now())
+  audio_files         audio_files[]
+  command_feedbacks   command_feedbacks[]
+  command_recipients  command_recipients[]
+  commands            commands[]
+  maintenance_records maintenance_records[]
+}

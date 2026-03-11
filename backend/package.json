@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "start:prod": "node server.js"
+    "start:prod": "node server.js",
+    "prisma:pull": "prisma db pull --schema prisma/schema.prisma",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma"
   },
   "keywords": [
     "express",
@@ -16,10 +18,13 @@
   "author": "南哪战队",
   "license": "MIT",
   "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.5.0",
+    "@prisma/client": "^7.5.0",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.0",
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
     "express": "^4.18.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
@@ -27,6 +32,9 @@
     "sqlite3": "^5.0.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.0"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.4.0",
+    "nodemon": "^3.0.0",
+    "prisma": "^7.4.2"
   }
 }
