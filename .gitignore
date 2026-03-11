@@ -52,6 +52,8 @@ venv/
 backend/db/*.db
 backend/db/*.sqlite
 backend/db/*.sqlite3
+backend/db/users.db
+backend/db/user.db
 
 # Audio files
 backend/uploads/*.mp3
