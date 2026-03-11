@@ -180,7 +180,17 @@ const db = new sqlite3.Database(path.join(__dirname, 'db/users.db'), (err) => {
         const defaultSensors = [
           { id: 1, name: '传感器-玄武区-001', latitude: 32.06, longitude: 118.78, status: '正常' },
           { id: 2, name: '传感器-秦淮区-002', latitude: 32.02, longitude: 118.79, status: '轻微漏水' },
-          { id: 3, name: '传感器-鼓楼区-003', latitude: 32.07, longitude: 118.77, status: '严重漏水' }
+          { id: 3, name: '传感器-鼓楼区-003', latitude: 32.07, longitude: 118.77, status: '严重漏水' },
+          { id: 4, name: '传感器-建邺区-004', latitude: 32.00, longitude: 118.74, status: '正常' },
+          { id: 5, name: '传感器-雨花台区-005', latitude: 31.98, longitude: 118.78, status: '正常' },
+          { id: 6, name: '传感器-栖霞区-006', latitude: 32.10, longitude: 118.88, status: '正常' },
+          { id: 7, name: '传感器-浦口区-007', latitude: 32.06, longitude: 118.62, status: '轻微漏水' },
+          { id: 8, name: '传感器-江宁区-008', latitude: 31.93, longitude: 118.84, status: '正常' },
+          { id: 9, name: '传感器-六合区-009', latitude: 32.34, longitude: 118.84, status: '正常' },
+          { id: 10, name: '传感器-溧水区-010', latitude: 31.64, longitude: 119.02, status: '正常' },
+          { id: 11, name: '传感器-高淳区-011', latitude: 31.32, longitude: 118.88, status: '正常' },
+          { id: 12, name: '传感器-玄武区-012', latitude: 32.05, longitude: 118.80, status: '正常' },
+          { id: 13, name: '传感器-秦淮区-013', latitude: 32.03, longitude: 118.77, status: '正常' }
         ];
         
         const stmt = db.prepare('INSERT INTO sensors (id, name, latitude, longitude, status) VALUES (?, ?, ?, ?, ?)');
