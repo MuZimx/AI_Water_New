@@ -1297,6 +1297,30 @@ app.get('/api/workers/my-status', authenticateToken, (req, res) => {
   });
 });
 
+// 更新工人状态
+app.put('/api/workers/my-status', authenticateToken, (req, res) => {
+  if (req.user.role !== '工人') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const { status } = req.body;
+
+  if (!status || !['空闲', '工作中'].includes(status)) {
+    return res.status(400).json({ success: false, message: '无效的状态值' });
+  }
+
+  const query = `UPDATE users SET worker_status = ? WHERE id = ?`;
+  db.run(query, [status, req.user.id], function(err) {
+    if (err) {
+      return res.status(500).json({ success: false, message: '服务器内部错误' });
+    }
+    if (this.changes === 0) {
+      return res.status(404).json({ success: false, message: '用户不存在' });
+    }
+    res.json({ success: true, message: '状态更新成功' });
+  });
+});
+
 // 错误处理中间件
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
