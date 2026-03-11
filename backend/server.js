@@ -943,7 +943,7 @@ app.post('/api/commands', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       message: '派工成功',
-      data: { commandId: result.id, commandNumber }
+      data: { id: result.id, commandId: result.id, commandNumber }
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: '创建指令失败' });
@@ -1511,6 +1511,15 @@ app.post('/api/commands/:id/attachments', authenticateToken, commandAttachmentsU
   const commandId = parseInt(req.params.id, 10);
   const files = req.files;
 
+  if (!Number.isInteger(commandId) || commandId <= 0) {
+    if (files && Array.isArray(files)) {
+      files.forEach(file => {
+        try { fs.unlinkSync(file.path); } catch (e) {}
+      });
+    }
+    return res.status(400).json({ success: false, message: '无效的命令ID' });
+  }
+
   if (!files || files.length === 0) {
     return res.status(400).json({ success: false, message: '请选择要上传的附件' });
   }
@@ -1548,6 +1557,7 @@ app.post('/api/commands/:id/attachments', authenticateToken, commandAttachmentsU
     files.forEach(file => {
       try { fs.unlinkSync(file.path); } catch (e) {}
     });
+    console.error('保存附件记录失败:', error);
     return res.status(500).json({ success: false, message: '保存附件记录失败' });
   }
 });

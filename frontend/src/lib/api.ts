@@ -68,8 +68,9 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const defaultHeaders: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...options.headers,
   };
 
@@ -278,11 +279,15 @@ export const API = {
 
   // 信息反馈与命令指示系统 API
   createCommand: async (data: { title: string; content: string; worker_ids: number[]; sensor_id?: number; deadline?: string }): Promise<{ id: number }> => {
-    const response = await request<{ success: boolean; data: { id: number } }>('/commands', {
+    const response = await request<{ success: boolean; data: { id?: number; commandId?: number } }>('/commands', {
       method: 'POST',
       body: JSON.stringify(data),
     });
-    return response.data;
+    const id = response.data?.id ?? response.data?.commandId;
+    if (!id) {
+      throw new Error('创建命令返回数据异常');
+    }
+    return { id };
   },
 
   getSensors: async (): Promise<Array<{ id: number; name: string; status?: string }>> => {
