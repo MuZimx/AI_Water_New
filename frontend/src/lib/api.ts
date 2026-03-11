@@ -340,6 +340,18 @@ export const API = {
     return response.data;
   },
 
+  // 获取工人收到的派工指令
+  getReceivedCommands: async (): Promise<any[]> => {
+    const response = await request<{ success: boolean; data: any[] }>('/commands/received');
+    return response.success ? response.data : [];
+  },
+
+  // 获取工人列表
+  getWorkers: async (): Promise<User[]> => {
+    const response = await request<{ success: boolean; data: User[] }>('/workers');
+    return response.success ? response.data : [];
+  },
+
   // 工人状态相关 API
   getWorkerStatus: async (): Promise<{ status: string; currentTask?: any }> => {
     const response = await request<{ success: boolean; data: { status: string; currentTask?: any } }>('/workers/my-status');

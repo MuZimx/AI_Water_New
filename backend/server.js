@@ -283,12 +283,15 @@ db.run(`CREATE TABLE IF NOT EXISTS maintenance_photos (
 // 创建命令指示表
 db.run(`CREATE TABLE IF NOT EXISTS commands (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  command_number TEXT UNIQUE,
   admin_id INTEGER NOT NULL,
   title TEXT NOT NULL,
   content TEXT NOT NULL,
+  sensor_id INTEGER,
   deadline DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (admin_id) REFERENCES users (id)
+  FOREIGN KEY (admin_id) REFERENCES users (id),
+  FOREIGN KEY (sensor_id) REFERENCES sensors (id)
 )`);
 
 // 创建命令接收者表
@@ -1067,11 +1070,16 @@ app.post('/api/commands', authenticateToken, (req, res) => {
 
 
       // 批量插入接收者
-      const stmt = db.prepare(`INSERT INTO command_recipients (command_id, worker_id) VALUES (?, ?)`);
-      worker_ids.forEach(workerId => {
-        stmt.run(commandId, workerId);
+      const stmt = db.prepare(`INSERT INTO command_recipients (command_id, user_id) VALUES (?, ?)`);
+      worker_ids.forEach(userId => {
+        stmt.run(commandId, userId);
       });
       stmt.finalize();
+
+      // 更新所有被分配工人的状态为"工作中"
+      worker_ids.forEach(userId => {
+        db.run(`UPDATE users SET worker_status = '工作中' WHERE id = ?`, [userId]);
+      });
 
       // 更新所有被分配工人的状态为"工作中"
       worker_ids.forEach(workerId => {
@@ -1094,11 +1102,12 @@ app.get('/api/commands/received', authenticateToken, (req, res) => {
   }
 
   const query = `
-    SELECT c.*, cr.read_status, cr.feedback, cr.feedback_photos, cr.updated_at as response_time, u.username as worker_name, u.full_name as worker_full_name
+    SELECT c.*, cr.status as recipient_status, cr.read_at, cr.completed_at,
+           u.username as worker_name, u.full_name as worker_full_name
     FROM commands c
     INNER JOIN command_recipients cr ON c.id = cr.command_id
-    INNER JOIN users u ON cr.worker_id = u.id
-    WHERE cr.worker_id = ?
+    INNER JOIN users u ON cr.user_id = u.id
+    WHERE cr.user_id = ?
     ORDER BY c.created_at DESC
   `;
 
@@ -1115,11 +1124,11 @@ app.get('/api/commands/:id/details', authenticateToken, (req, res) => {
   const { id } = req.params;
 
   const query = `
-    SELECT c.*, cr.read_status, cr.feedback, cr.feedback_photos, cr.updated_at as response_time,
+    SELECT c.*, cr.status as recipient_status, cr.read_at, cr.completed_at,
            u.username as worker_name, u.full_name as worker_full_name
     FROM commands c
     INNER JOIN command_recipients cr ON c.id = cr.command_id
-    INNER JOIN users u ON cr.worker_id = u.id
+    INNER JOIN users u ON cr.user_id = u.id
     WHERE c.id = ?
   `;
 
@@ -1127,32 +1136,20 @@ app.get('/api/commands/:id/details', authenticateToken, (req, res) => {
     if (err) {
       return res.status(500).json({ success: false, message: '服务器内部错误' });
     }
-    // 解析photos数组
-    const result = rows.map(row => {
-      let photos = [];
-      if (row.feedback_photos) {
-        try {
-          photos = JSON.parse(row.feedback_photos);
-        } catch (e) {
-          photos = [];
-        }
-      }
-      return { ...row, photos };
-    });
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: rows });
   });
 });
 
-// 按传感器ID查询指令（所有用户可见）
+// 按传感器ID或状态查询指令（所有用户可见）
 app.get('/api/commands', authenticateToken, (req, res) => {
-  const { sensor_id } = req.query;
+  const { sensor_id, status } = req.query;
 
   let query = `
-    SELECT c.*, cr.read_status, cr.feedback, cr.feedback_photos, cr.updated_at as response_time,
+    SELECT c.*, cr.status as recipient_status, cr.read_at, cr.completed_at,
            u.username as worker_name, u.full_name as worker_full_name
     FROM commands c
     INNER JOIN command_recipients cr ON c.id = cr.command_id
-    INNER JOIN users u ON cr.worker_id = u.id
+    INNER JOIN users u ON cr.user_id = u.id
     WHERE 1=1
   `;
   const params = [];
@@ -1162,25 +1159,18 @@ app.get('/api/commands', authenticateToken, (req, res) => {
     params.push(sensor_id);
   }
 
+  if (status) {
+    query += ` AND cr.status = ?`;
+    params.push(status);
+  }
+
   query += ` ORDER BY c.created_at DESC`;
 
   db.all(query, params, (err, rows) => {
     if (err) {
       return res.status(500).json({ success: false, message: '服务器内部错误' });
     }
-    // 解析photos数组
-    const result = rows.map(row => {
-      let photos = [];
-      if (row.feedback_photos) {
-        try {
-          photos = JSON.parse(row.feedback_photos);
-        } catch (e) {
-          photos = [];
-        }
-      }
-      return { ...row, photos };
-    });
-    res.json({ success: true, data: result });
+    res.json({ success: true, data: rows });
   });
 });
 
@@ -1208,11 +1198,11 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
 
       const updateQuery = `
         UPDATE command_recipients
-        SET feedback = ?, feedback_photos = ?, read_status = 1, updated_at = ?
-        WHERE command_id = ? AND worker_id = ?
+        SET status = '已完成', completed_at = ?
+        WHERE command_id = ? AND user_id = ?
       `;
 
-      db.run(updateQuery, [feedback || '', JSON.stringify(photoUrls), new Date().toISOString(), id, req.user.id], function(err) {
+      db.run(updateQuery, [new Date().toISOString(), id, req.user.id], function(err) {
         if (err) {
           return res.status(500).json({ success: false, message: '提交反馈失败' });
         }
