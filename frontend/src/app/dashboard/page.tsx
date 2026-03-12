@@ -565,6 +565,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          selectedSensor?.status === '传感器损坏' ? 'bg-gray-100 text-gray-600' :
                           selectedSensor?.status === '严重漏水' ? 'bg-red-100 text-red-700' :
                           selectedSensor?.status === '轻微漏水' ? 'bg-yellow-100 text-yellow-700' :
                           'bg-green-100 text-green-700'
