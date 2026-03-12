@@ -47,6 +47,13 @@ export default function MaintenancePage() {
     loadUser();
   }, []);
 
+  // 当搜索查询或状态过滤器变化时，重新加载检修记录
+  useEffect(() => {
+    if (currentUser) {
+      loadRecords();
+    }
+  }, [searchQuery, statusFilter]);
+
   const loadUser = async () => {
     try {
       const user = await API.getCurrentUser();
@@ -67,6 +74,9 @@ export default function MaintenancePage() {
       const params: any = {};
       if (statusFilter !== 'all') {
         params.status = statusFilter;
+      }
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
       }
       const { data } = await API.getMaintenanceRecords(params);
       setRecords(data);
@@ -168,13 +178,8 @@ export default function MaintenancePage() {
               </CardContent>
             </Card>
           ) : (
-            records
-              .filter((record) =>
-                record.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                record.content.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .map((record) => (
-                <Card key={record.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleViewRecord(record.id)}>
+            records.map((record) => (
+              <Card key={record.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleViewRecord(record.id)}>
                   <CardHeader className="flex flex-row justify-between items-start">
                     <div>
                       <div className="flex items-center gap-2 mb-1">

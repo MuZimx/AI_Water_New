@@ -42,6 +42,13 @@ export default function CommandsPage() {
     loadUser();
   }, []);
 
+  // 当搜索查询或状态过滤器变化时，重新加载命令
+  useEffect(() => {
+    if (currentUser) {
+      loadCommands();
+    }
+  }, [searchQuery, statusFilter]);
+
   const loadUser = async () => {
     try {
       const user = await API.getCurrentUser();
@@ -63,10 +70,13 @@ export default function CommandsPage() {
       if (statusFilter !== 'all') {
         params.status = statusFilter;
       }
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
 
       let commandData;
       if (currentUser?.role === '工人') {
-        commandData = await API.getReceivedCommands();
+        commandData = await API.getReceivedCommands(params);
       } else {
         const { data } = await API.getCommands(params);
         commandData = data;
@@ -134,7 +144,7 @@ export default function CommandsPage() {
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="搜索命令..."
+              placeholder="搜索命令标题、内容或状态（如：未执行、已完成）..."
               className="pl-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -172,54 +182,53 @@ export default function CommandsPage() {
             <Card>
               <CardContent className="text-center py-12">
                 <div className="text-muted-foreground">
-                  {currentUser?.role === '管理员' ? '暂无命令' : '暂无待执行的命令'}
+                  {searchQuery.trim()
+                    ? `未找到包含"${searchQuery}"的命令`
+                    : statusFilter === 'all'
+                    ? (currentUser?.role === '管理员' ? '暂无命令' : '暂无待执行的命令')
+                    : `暂无${statusFilter}的命令`}
                 </div>
               </CardContent>
             </Card>
           ) : (
-            commands
-              .filter((command) =>
-                command.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                command.content.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .map((command) => (
-                <Card key={command.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleViewCommand(command.id)}>
-                  <CardHeader className="flex flex-row justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-semibold text-lg">{command.title}</h3>
-                        {command.recipient_status && (
-                          <span className={`flex items-center px-2 py-0.5 text-xs rounded-full ${getStatusColor(command.recipient_status)}`}>
-                            {getStatusIcon(command.recipient_status)}
-                            <span className="ml-1">{command.recipient_status}</span>
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center text-sm text-muted-foreground gap-4 content-start">
-                        <div className="flex items-center gap-1">
-                          <span>{command.admin_name}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          <span>{format(new Date(command.created_at), 'yyyy-MM-dd HH:mm')}</span>
-                        </div>
-                        {command.deadline && (
-                          <div className="flex items-center gap-1 text-red-500">
-                            <Clock className="h-3 w-3" />
-                            <span>{format(new Date(command.deadline), 'yyyy-MM-dd HH:mm')}</span>
-                          </div>
-                        )}
-                      </div>
+            commands.map((command) => (
+              <Card key={command.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleViewCommand(command.id)}>
+                <CardHeader className="flex flex-row justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-lg">{command.title}</h3>
+                      {command.recipient_status && (
+                        <span className={`flex items-center px-2 py-0.5 text-xs rounded-full ${getStatusColor(command.recipient_status)}`}>
+                          {getStatusIcon(command.recipient_status)}
+                          <span className="ml-1">{command.recipient_status === '已执行' ? '已完成' : command.recipient_status}</span>
+                        </span>
+                      )}
                     </div>
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {command.content}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))
+                    <div className="flex items-center text-sm text-muted-foreground gap-4 content-start">
+                      <div className="flex items-center gap-1">
+                        <span>{command.admin_name}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        <span>{format(new Date(command.created_at), 'yyyy-MM-dd HH:mm')}</span>
+                      </div>
+                      {command.deadline && (
+                        <div className="flex items-center gap-1 text-red-500">
+                          <Clock className="h-3 w-3" />
+                          <span>{format(new Date(command.deadline), 'yyyy-MM-dd HH:mm')}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground line-clamp-2">
+                    {command.content}
+                  </p>
+                </CardContent>
+              </Card>
+            ))
           )}
         </div>
       </div>

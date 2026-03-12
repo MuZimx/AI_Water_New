@@ -13,6 +13,11 @@ export interface AudioFile {
   size: number;
   upload_time: string;
   user_id: number;
+  sensor_id?: number;
+  sensor?: {
+    id: number;
+    name: string;
+  };
   risk_level: RiskLevel;
   confidence: number;
   status?: 'processing' | 'completed' | 'error'; // 前端计算字段，后端不返回
@@ -215,9 +220,12 @@ export const API = {
     return response.success ? response.data : [];
   },
 
-  uploadFile: async (file: File): Promise<AudioFile> => {
+  uploadFile: async (file: File, sensorId?: number): Promise<AudioFile> => {
     const formData = new FormData();
     formData.append('audio', file);
+    if (sensorId) {
+      formData.append('sensor_id', sensorId.toString());
+    }
 
     const token = localStorage.getItem('auth_token');
     const url = `${API_BASE_URL}/upload-audio`;
@@ -285,12 +293,13 @@ export const API = {
     return response.data;
   },
 
-  getMaintenanceRecords: async (params?: { page?: number; size?: number; status?: string; sensor_id?: number }): Promise<{ data: any[]; total: number }> => {
+  getMaintenanceRecords: async (params?: { page?: number; size?: number; status?: string; sensor_id?: number; search?: string }): Promise<{ data: any[]; total: number }> => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.size) queryParams.append('size', params.size.toString());
     if (params?.status) queryParams.append('status', params.status);
     if (params?.sensor_id) queryParams.append('sensor_id', params.sensor_id.toString());
+    if (params?.search) queryParams.append('search', params.search);
     const response = await request<{ success: boolean; data: any[]; total: number }>(`/maintenance-records?${queryParams}`);
     return { data: response.data, total: response.total };
   },
@@ -338,11 +347,12 @@ export const API = {
     return response.data;
   },
 
-  getCommands: async (params?: { page?: number; size?: number; status?: string }): Promise<{ data: any[]; total: number }> => {
+  getCommands: async (params?: { page?: number; size?: number; status?: string; search?: string }): Promise<{ data: any[]; total: number }> => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.size) queryParams.append('size', params.size.toString());
     if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
     const response = await request<{ success: boolean; data: any[]; total: number }>(`/commands?${queryParams}`);
     return { data: response.data, total: response.total };
   },
@@ -433,8 +443,11 @@ export const API = {
   },
 
   // 获取工人收到的派工指令
-  getReceivedCommands: async (): Promise<any[]> => {
-    const response = await request<{ success: boolean; data: any[] }>('/commands/received');
+  getReceivedCommands: async (params?: { status?: string; search?: string }): Promise<any[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
+    const response = await request<{ success: boolean; data: any[] }>(`/commands/received?${queryParams}`);
     return response.success ? response.data : [];
   },
 

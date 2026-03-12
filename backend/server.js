@@ -451,14 +451,29 @@ app.get('/api/audio-files', authenticateToken, async (req, res) => {
       prisma.audio_files.findMany({
         orderBy: { id: 'desc' },
         skip: offset,
-        take: size
+        take: size,
+        include: {
+          sensors: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
       }),
       prisma.audio_files.count()
     ]);
 
+    // 将 sensors 转换为 sensor 以匹配前端接口
+    const formattedRows = rows.map(row => ({
+      ...row,
+      sensor: row.sensors || null,
+      sensors: undefined
+    }));
+
     res.json({
       success: true,
-      data: rows,
+      data: formattedRows,
       total
     });
   } catch (error) {
@@ -1030,13 +1045,23 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
   }
 
   try {
+    const { status, search } = req.query;
+
+    const where = { user_id: req.user.id };
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+
     const rows = await prisma.command_recipients.findMany({
-      where: { user_id: req.user.id },
+      where,
       include: {
         commands: {
           include: {
             sensors: {
               select: { id: true, status: true }
+            },
+            users: {
+              select: { username: true }
             }
           }
         },
@@ -1047,7 +1072,7 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
       orderBy: { commands: { created_at: 'desc' } }
     });
 
-    const data = rows.map(item => ({
+    let data = rows.map(item => ({
       ...item.commands,
       recipient_status: item.status,
       read_at: item.read_at,
@@ -1055,8 +1080,26 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
       worker_name: item.users.username,
       worker_full_name: item.users.full_name,
       sensor_id: item.commands.sensors?.id || null,
-      sensor_status: item.commands.sensors?.status || null
+      sensor_status: item.commands.sensors?.status || null,
+      admin_name: item.commands.users?.username || ''
     }));
+
+    // 关键字搜索（支持语义搜索）
+    if (search && search.trim()) {
+      const searchTerm = search.trim().toLowerCase();
+      data = data.filter(cmd => {
+        // 语义搜索：支持搜索状态
+        if (searchTerm === '未执行' && cmd.recipient_status === '未执行') {
+          return true;
+        }
+        if (searchTerm === '已完成' && cmd.recipient_status === '已完成') {
+          return true;
+        }
+        // 常规搜索：搜索标题和内容
+        return (cmd.title && cmd.title.toLowerCase().includes(searchTerm)) ||
+               (cmd.content && cmd.content.toLowerCase().includes(searchTerm));
+      });
+    }
 
     res.json({ success: true, data });
   } catch (error) {
@@ -1096,17 +1139,25 @@ app.get('/api/commands/:id/details', authenticateToken, async (req, res) => {
 
 // 按传感器ID或状态查询指令（所有用户可见）
 app.get('/api/commands', authenticateToken, async (req, res) => {
-  const { sensor_id, status } = req.query;
+  const { sensor_id, status, search } = req.query;
 
   try {
-    const where = {
-      ...(sensor_id ? { commands: { sensor_id: parseInt(sensor_id, 10) } } : {}),
-      ...(status ? { status } : {})
-    };
+    const where = {};
+
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+
     const rows = await prisma.command_recipients.findMany({
       where,
       include: {
-        commands: true,
+        commands: {
+          include: {
+            users: {
+              select: { username: true }
+            }
+          }
+        },
         users: {
           select: { username: true, full_name: true }
         }
@@ -1114,17 +1165,36 @@ app.get('/api/commands', authenticateToken, async (req, res) => {
       orderBy: { commands: { created_at: 'desc' } }
     });
 
-    const data = rows.map(item => ({
+    let data = rows.map(item => ({
       ...item.commands,
       recipient_status: item.status,
       read_at: item.read_at,
       completed_at: item.completed_at,
       worker_name: item.users.username,
-      worker_full_name: item.users.full_name
+      worker_full_name: item.users.full_name,
+      admin_name: item.commands.users?.username || ''
     }));
+
+    // 关键字搜索（支持语义搜索）
+    if (search && search.trim()) {
+      const searchTerm = search.trim().toLowerCase();
+      data = data.filter(cmd => {
+        // 语义搜索：支持搜索状态
+        if (searchTerm === '未执行' && cmd.recipient_status === '未执行') {
+          return true;
+        }
+        if (searchTerm === '已完成' && cmd.recipient_status === '已完成') {
+          return true;
+        }
+        // 常规搜索：搜索标题和内容
+        return (cmd.title && cmd.title.toLowerCase().includes(searchTerm)) ||
+               (cmd.content && cmd.content.toLowerCase().includes(searchTerm));
+      });
+    }
 
     res.json({ success: true, data });
   } catch (error) {
+    console.error('获取命令列表失败:', error);
     return res.status(500).json({ success: false, message: '服务器内部错误' });
   }
 });
@@ -1548,11 +1618,18 @@ app.get('/api/maintenance-records', authenticateToken, async (req, res) => {
   const offset = (page - 1) * size;
   const status = req.query.status;
   const sensorId = req.query.sensor_id;
+  const search = req.query.search;
 
   const where = {
     ...(req.user.role !== '管理员' ? { user_id: req.user.id } : {}),
     ...(status ? { status } : {}),
-    ...(sensorId ? { maintenance_sensors: { some: { sensor_id: parseInt(sensorId, 10) } } } : {})
+    ...(sensorId ? { maintenance_sensors: { some: { sensor_id: parseInt(sensorId, 10) } } } : {}),
+    ...(search ? {
+      OR: [
+        { title: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } }
+      ]
+    } : {})
   };
 
   try {
@@ -1811,7 +1888,7 @@ app.put('/api/commands/:id/status', authenticateToken, async (req, res) => {
   const commandId = parseInt(req.params.id, 10);
   const { status } = req.body;
 
-  if (!status || !['未执行', '已执行'].includes(status)) {
+  if (!status || !['未执行', '已完成'].includes(status)) {
     return res.status(400).json({ success: false, message: '无效的状态' });
   }
 
@@ -1828,8 +1905,8 @@ app.put('/api/commands/:id/status', authenticateToken, async (req, res) => {
       where: { id: recipient.id },
       data: {
         status,
-        ...(status === '已执行' ? { completed_at: new Date() } : {}),
-        ...(status === '已执行' && !recipient.read_at ? { read_at: new Date() } : {})
+        ...(status === '已完成' ? { completed_at: new Date() } : {}),
+        ...(status === '已完成' && !recipient.read_at ? { read_at: new Date() } : {})
       }
     });
 

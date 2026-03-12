@@ -30,6 +30,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { 
@@ -84,6 +86,7 @@ export default function DashboardPage() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [selectedSensorForUpload, setSelectedSensorForUpload] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -254,9 +257,10 @@ export default function DashboardPage() {
 
     setIsUploading(true);
     try {
-      await API.uploadFile(file);
+      await API.uploadFile(file, selectedSensorForUpload);
       loadFiles();
       toast({ title: "上传成功", description: "文件正由 AI Water 进行智能分析。" });
+      setSelectedSensorForUpload(undefined); // 重置传感器选择
     } catch (error: any) {
       toast({ variant: "destructive", title: "上传失败", description: error.message || "文件传输过程中发生错误。" });
     } finally {
@@ -391,7 +395,7 @@ export default function DashboardPage() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:bg-destructive/10">
                   <LogOut className="mr-2 h-4 w-4" />
-                  注销
+                  退出登录
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -463,7 +467,7 @@ export default function DashboardPage() {
         <div className="lg:col-span-8 space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">监控清单</h2>
+              <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">手动检查</h2>
               <p className="text-xs text-muted-foreground">当前共有 {files.length} 个采集样本</p>
             </div>
             
@@ -491,17 +495,40 @@ export default function DashboardPage() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-6 py-4">
+                    {/* 传感器选择 */}
+                    <div className="space-y-2">
+                      <Label htmlFor="sensor-select">选择传感器 <span className="text-red-500">*</span></Label>
+                      <Select
+                        value={selectedSensorForUpload?.toString()}
+                        onValueChange={(value) => setSelectedSensorForUpload(parseInt(value, 10))}
+                      >
+                        <SelectTrigger id="sensor-select">
+                          <SelectValue placeholder="请选择传感器" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sensors.length === 0 ? (
+                            <SelectItem value="loading" disabled>加载中...</SelectItem>
+                          ) : (
+                            sensors.map((sensor) => (
+                              <SelectItem key={sensor.id} value={sensor.id.toString()}>
+                                {sensor.name} ({sensor.status})
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="flex flex-col items-center justify-center border-2 border-dashed border-muted rounded-xl p-10 hover:border-secondary/50 hover:bg-secondary/5 transition-all group cursor-pointer relative">
-                      <input 
-                        type="file" 
+                      <input
+                        type="file"
                         id="audio-upload"
                         title="上传音频文件"
                         aria-label="上传音频文件，支持 .wav 和 .mp3"
                         aria-describedby="audio-upload-desc"
                         accept="audio/*"
-                        className="absolute inset-0 opacity-0 cursor-pointer" 
+                        className="absolute inset-0 opacity-0 cursor-pointer"
                         onChange={handleFileUpload}
-                        disabled={isUploading}
+                        disabled={isUploading || !selectedSensorForUpload}
                       />
                       <Upload className="h-10 w-10 text-muted-foreground mb-4 group-hover:text-secondary group-hover:scale-110 transition-all" />
                       <p className="text-sm font-medium">点击或拖拽音频文件</p>
@@ -538,6 +565,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <span className={`px-2 py-0.5 rounded-full font-medium ${
+                          selectedSensor?.status === '传感器损坏' ? 'bg-gray-100 text-gray-600' :
                           selectedSensor?.status === '严重漏水' ? 'bg-red-100 text-red-700' :
                           selectedSensor?.status === '轻微漏水' ? 'bg-yellow-100 text-yellow-700' :
                           'bg-green-100 text-green-700'
@@ -617,13 +645,10 @@ export default function DashboardPage() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full sm:w-[400px] grid-cols-4 bg-muted/50 p-1">
+            <TabsList className="grid w-full sm:w-[400px] grid-cols-3 bg-muted/50 p-1">
               <TabsTrigger value="all" className="text-xs sm:text-sm">所有样本</TabsTrigger>
               <TabsTrigger value="high" className="text-xs sm:text-sm text-destructive data-[state=active]:text-destructive">高风险</TabsTrigger>
               <TabsTrigger value="processing" className="text-xs sm:text-sm">分析中</TabsTrigger>
-              {currentUser?.role === '工人' && (
-                <TabsTrigger value="tasks" className="text-xs sm:text-sm">维修任务</TabsTrigger>
-              )}
             </TabsList>
 
             <TabsContent value="all" className="mt-6 space-y-4">
@@ -669,6 +694,12 @@ export default function DashboardPage() {
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
                             <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                             <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            {file.sensor && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <span className="text-primary font-medium">传感器: {file.sensor.name}</span>
+                              </>
+                            )}
                             {file.status === 'completed' && file.risk_level !== '未检测' && (
                               <>
                                 <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
@@ -727,6 +758,12 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
+                            {file.sensor && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <span className="text-destructive font-medium">传感器: {file.sensor.name}</span>
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -772,6 +809,12 @@ export default function DashboardPage() {
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
                             <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                             <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            {file.sensor && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <span className="text-primary font-medium">传感器: {file.sensor.name}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -780,21 +823,6 @@ export default function DashboardPage() {
                 </div>
               )}
             </TabsContent>
-
-            {currentUser?.role === '工人' && (
-              <TabsContent value="tasks" className="mt-6 space-y-4" id="tasks-section">
-                <WorkerNotifications
-                  currentUser={currentUser}
-                  onStatusChange={() => {
-                    // 刷新工人状态
-                    API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
-                  }}
-                  onRefreshSensors={loadSensors}
-                  fromBanner={false}
-                  inDialog={false}
-                />
-              </TabsContent>
-            )}
           </Tabs>
         </div>
 
