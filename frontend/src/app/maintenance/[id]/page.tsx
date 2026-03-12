@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { API, type User } from '@/lib/api';
+import { API, type User as TUser } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -46,7 +46,7 @@ export default function MaintenanceDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<TUser | null>(null);
   const [record, setRecord] = useState<MaintenanceRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
