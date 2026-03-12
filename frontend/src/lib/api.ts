@@ -374,4 +374,11 @@ export const API = {
       body: JSON.stringify({ status }),
     });
   },
+
+  // 重置维修记录（仅管理员）
+  resetMaintenance: async (): Promise<void> => {
+    await request<{ success: boolean }>('/commands/reset', {
+      method: 'DELETE',
+    });
+  },
 };

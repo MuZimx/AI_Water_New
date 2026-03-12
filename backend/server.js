@@ -1165,11 +1165,19 @@ app.delete('/api/commands/reset', authenticateToken, async (req, res) => {
 
   try {
     await prisma.$transaction(async (tx) => {
+      // 删除检修记录相关的照片和传感器关联
+      await tx.maintenance_photos.deleteMany({});
+      await tx.maintenance_sensors.deleteMany({});
+      await tx.maintenance_records.deleteMany({});
+
+      // 删除命令相关的数据
       await tx.command_recipients.deleteMany({});
       await tx.command_feedback_photos.deleteMany({});
       await tx.command_feedbacks.deleteMany({});
       await tx.command_attachments.deleteMany({});
       await tx.commands.deleteMany({});
+
+      // 将所有工人状态重置为"空闲"
       await tx.users.updateMany({
         where: { role: '工人' },
         data: { worker_status: '空闲' }

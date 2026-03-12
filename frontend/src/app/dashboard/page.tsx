@@ -309,8 +309,7 @@ export default function DashboardPage() {
   const handleResetMaintenance = async () => {
     setIsResetting(true);
     try {
-      // 某些版本的 API 可能不存在 resetMaintenance，使用 any 并可选链以避免类型错误
-      await (API as any).resetMaintenance?.();
+      await API.resetMaintenance();
       toast({ title: "重置成功", description: "所有维修记录已删除，工人状态已恢复" });
       setResetDialogOpen(false);
       // 刷新数据
@@ -962,6 +961,7 @@ export default function DashboardPage() {
                 确定要删除所有维修记录吗？此操作将：
               </p>
               <ul className="text-orange-700 text-sm mt-2 space-y-1 list-disc list-inside">
+                <li>删除所有检修记录（含照片和传感器关联）</li>
                 <li>删除所有派工指令和维修反馈</li>
                 <li>将所有工人状态重置为"空闲"</li>
                 <li>传感器状态保持不变，只清除维修记录</li>
