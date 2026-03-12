@@ -30,6 +30,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { 
@@ -84,6 +86,7 @@ export default function DashboardPage() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [selectedSensorForUpload, setSelectedSensorForUpload] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -254,9 +257,10 @@ export default function DashboardPage() {
 
     setIsUploading(true);
     try {
-      await API.uploadFile(file);
+      await API.uploadFile(file, selectedSensorForUpload);
       loadFiles();
       toast({ title: "上传成功", description: "文件正由 AI Water 进行智能分析。" });
+      setSelectedSensorForUpload(undefined); // 重置传感器选择
     } catch (error: any) {
       toast({ variant: "destructive", title: "上传失败", description: error.message || "文件传输过程中发生错误。" });
     } finally {
@@ -463,7 +467,7 @@ export default function DashboardPage() {
         <div className="lg:col-span-8 space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">监控清单</h2>
+              <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">手动检查</h2>
               <p className="text-xs text-muted-foreground">当前共有 {files.length} 个采集样本</p>
             </div>
             
@@ -491,17 +495,40 @@ export default function DashboardPage() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-6 py-4">
+                    {/* 传感器选择 */}
+                    <div className="space-y-2">
+                      <Label htmlFor="sensor-select">选择传感器 <span className="text-red-500">*</span></Label>
+                      <Select
+                        value={selectedSensorForUpload?.toString()}
+                        onValueChange={(value) => setSelectedSensorForUpload(parseInt(value, 10))}
+                      >
+                        <SelectTrigger id="sensor-select">
+                          <SelectValue placeholder="请选择传感器" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {sensors.length === 0 ? (
+                            <SelectItem value="loading" disabled>加载中...</SelectItem>
+                          ) : (
+                            sensors.map((sensor) => (
+                              <SelectItem key={sensor.id} value={sensor.id.toString()}>
+                                {sensor.name} ({sensor.status})
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="flex flex-col items-center justify-center border-2 border-dashed border-muted rounded-xl p-10 hover:border-secondary/50 hover:bg-secondary/5 transition-all group cursor-pointer relative">
-                      <input 
-                        type="file" 
+                      <input
+                        type="file"
                         id="audio-upload"
                         title="上传音频文件"
                         aria-label="上传音频文件，支持 .wav 和 .mp3"
                         aria-describedby="audio-upload-desc"
                         accept="audio/*"
-                        className="absolute inset-0 opacity-0 cursor-pointer" 
+                        className="absolute inset-0 opacity-0 cursor-pointer"
                         onChange={handleFileUpload}
-                        disabled={isUploading}
+                        disabled={isUploading || !selectedSensorForUpload}
                       />
                       <Upload className="h-10 w-10 text-muted-foreground mb-4 group-hover:text-secondary group-hover:scale-110 transition-all" />
                       <p className="text-sm font-medium">点击或拖拽音频文件</p>

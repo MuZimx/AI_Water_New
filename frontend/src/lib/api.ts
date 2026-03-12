@@ -215,9 +215,12 @@ export const API = {
     return response.success ? response.data : [];
   },
 
-  uploadFile: async (file: File): Promise<AudioFile> => {
+  uploadFile: async (file: File, sensorId?: number): Promise<AudioFile> => {
     const formData = new FormData();
     formData.append('audio', file);
+    if (sensorId) {
+      formData.append('sensor_id', sensorId.toString());
+    }
 
     const token = localStorage.getItem('auth_token');
     const url = `${API_BASE_URL}/upload-audio`;
