@@ -169,7 +169,7 @@ export default function MaintenanceDetailPage() {
               <div>
                 <CardTitle className="text-xl">{record.title}</CardTitle>
                 <div className="flex items-center gap-2 mt-2">
-                  <span className={`px-3 py-1 text-sm rounded-full ${getStatusColor(record.status)}`}>
+                  <span className={`flex items-center px-3 py-1 text-sm rounded-full ${getStatusColor(record.status)}`}>
                     {getStatusIcon(record.status)}
                     <span className="ml-1">{record.status}</span>
                   </span>
@@ -211,7 +211,7 @@ export default function MaintenanceDetailPage() {
             </div>
           </CardContent>
           {currentUser?.role === '管理员' || currentUser?.id === record.user_id ? (
-            <CardContent className="border-t">
+            <CardContent>
               <Button 
                 onClick={handleStatusUpdate}
                 className="bg-primary hover:bg-primary/90"
