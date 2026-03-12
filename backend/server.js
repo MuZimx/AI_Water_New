@@ -1054,7 +1054,14 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
   const { feedback, content, update_sensor } = req.body;
   const feedbackText = (feedback || content || '').trim();
 
+  console.log('提交反馈 - Command ID:', id);
+  console.log('提交反馈 - 用户:', req.user);
+  console.log('提交反馈 - 反馈内容:', feedbackText);
+  console.log('提交反馈 - 更新传感器:', update_sensor);
+  console.log('提交反馈 - 上传文件数量:', req.files ? req.files.length : 0);
+
   if (req.user.role !== '工人') {
+    console.error('权限不足: 用户角色不是工人');
     return res.status(403).json({ success: false, message: '权限不足' });
   }
 
@@ -1129,12 +1136,14 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
       }
     });
 
-    res.json({ success: true, message: '反馈提交成功', photos: photoUrls, feedbackId });
+    console.log('反馈提交成功, feedbackId:', feedbackId);
+    res.json({ success: true, message: '反馈提交成功', photos: photoUrls, feedbackId, id: feedbackId });
   } catch (error) {
+    console.error('提交反馈失败:', error);
     if (error.message === 'NOT_FOUND') {
-      return res.status(404).json({ success: false, message: '指令不存在' });
+      return res.status(404).json({ success: false, message: '指令不存在或无权访问' });
     }
-    return res.status(500).json({ success: false, message: '提交反馈失败' });
+    return res.status(500).json({ success: false, message: '提交反馈失败，请稍后重试' });
   }
 });
 
