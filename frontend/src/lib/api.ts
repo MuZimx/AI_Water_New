@@ -293,12 +293,13 @@ export const API = {
     return response.data;
   },
 
-  getMaintenanceRecords: async (params?: { page?: number; size?: number; status?: string; sensor_id?: number }): Promise<{ data: any[]; total: number }> => {
+  getMaintenanceRecords: async (params?: { page?: number; size?: number; status?: string; sensor_id?: number; search?: string }): Promise<{ data: any[]; total: number }> => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.size) queryParams.append('size', params.size.toString());
     if (params?.status) queryParams.append('status', params.status);
     if (params?.sensor_id) queryParams.append('sensor_id', params.sensor_id.toString());
+    if (params?.search) queryParams.append('search', params.search);
     const response = await request<{ success: boolean; data: any[]; total: number }>(`/maintenance-records?${queryParams}`);
     return { data: response.data, total: response.total };
   },

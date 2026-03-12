@@ -1618,11 +1618,18 @@ app.get('/api/maintenance-records', authenticateToken, async (req, res) => {
   const offset = (page - 1) * size;
   const status = req.query.status;
   const sensorId = req.query.sensor_id;
+  const search = req.query.search;
 
   const where = {
     ...(req.user.role !== '管理员' ? { user_id: req.user.id } : {}),
     ...(status ? { status } : {}),
-    ...(sensorId ? { maintenance_sensors: { some: { sensor_id: parseInt(sensorId, 10) } } } : {})
+    ...(sensorId ? { maintenance_sensors: { some: { sensor_id: parseInt(sensorId, 10) } } } : {}),
+    ...(search ? {
+      OR: [
+        { title: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } }
+      ]
+    } : {})
   };
 
   try {
