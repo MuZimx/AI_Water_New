@@ -59,7 +59,7 @@ export default function ProfilePage() {
         <div className="flex items-center justify-between">
           <Button variant="ghost" className="gap-2" onClick={() => router.push('/dashboard')}>
             <ArrowLeft className="h-4 w-4" />
-            返回仪表板
+            返回主页
           </Button>
           <div className="flex items-center gap-2 text-primary">
             <UserCog className="h-5 w-5" />
