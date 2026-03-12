@@ -93,6 +93,48 @@ npm run dev
 - 前端地址: http://localhost:9002
 - 后端地址: http://localhost:3000
 
+## 环境变量说明
+
+本项目环境变量分为后端（`backend/.env`）和前端（`frontend/.env.local`）。
+
+### 后端环境变量（backend）
+
+建议从 `backend/.env.example` 复制：
+
+```bash
+cd backend
+cp .env.example .env
+```
+
+| 变量名 | 是否必填 | 示例 | 作用 |
+|---|---|---|---|
+| `PORT` | 否 | `3001` | 后端服务监听端口，不填默认 `3001`。 |
+| `DATABASE_URL` | 是 | `file:./db/users.db` | Prisma 使用的数据库连接串。 |
+| `ACCESS_TOKEN_SECRET` | 建议是 | `change_this_access_secret` | JWT 访问令牌签名密钥。 |
+| `REFRESH_TOKEN_SECRET` | 建议是 | `change_this_refresh_secret` | JWT 刷新令牌签名密钥。 |
+| `ACCESS_TOKEN_EXPIRES_IN` | 否 | `15m` | 访问令牌过期时间。 |
+| `REFRESH_TOKEN_EXPIRES_IN` | 否 | `7d` | 刷新令牌过期时间。 |
+| `API_BASE_URL` | 否 | `http://127.0.0.1:3001/api` | 仅用于 `backend/test-api.js` 测试脚本请求地址。 |
+
+### 前端环境变量（frontend）
+
+建议从 `frontend/.env.example` 复制：
+
+```bash
+cd frontend
+cp .env.example .env.local
+```
+
+| 变量名 | 是否必填 | 示例 | 作用 |
+|---|---|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | 建议是 | `http://127.0.0.1:3001/api` | 前端请求后端 API 的基地址。 |
+| `NEXT_PUBLIC_OFFLINE_TILE_URL` | 否 | `/tiles/{z}/{x}/{y}.png` | 地图离线瓦片模板地址（优先级最高）。 |
+| `NEXT_PUBLIC_MAP_STYLE` | 否 | `https://.../style.json` | MapLibre/Mapbox 样式地址。 |
+| `NEXT_PUBLIC_MAPBOX_TOKEN` | 否 | `pk.xxx` | 当样式地址依赖 token 时使用。 |
+| `NEXT_PUBLIC_TDT_KEY` | 否 | `your_tianditu_key` | 天地图 Key（特定地图模式使用）。 |
+
+> 注意：所有 `NEXT_PUBLIC_` 开头变量会暴露到浏览器端，请勿放置私密信息。
+
 ## 技术栈
 
 ### 前端
@@ -255,10 +297,16 @@ npm run build
 ```
 
 2. **配置环境变量**
-创建 `.env` 文件:
+建议分别创建 `backend/.env` 和 `frontend/.env.local`（可从各自 `.env.example` 复制）：
 ```env
-PORT=3000
-NODE_ENV=production
+# backend/.env
+PORT=3001
+DATABASE_URL=file:./db/users.db
+ACCESS_TOKEN_SECRET=change_this_access_secret
+REFRESH_TOKEN_SECRET=change_this_refresh_secret
+
+# frontend/.env.local
+NEXT_PUBLIC_API_BASE_URL=https://your-domain/api
 ```
 
 3. **启动服务**
