@@ -346,11 +346,12 @@ export const API = {
     return response.data;
   },
 
-  getCommands: async (params?: { page?: number; size?: number; status?: string }): Promise<{ data: any[]; total: number }> => {
+  getCommands: async (params?: { page?: number; size?: number; status?: string; search?: string }): Promise<{ data: any[]; total: number }> => {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.size) queryParams.append('size', params.size.toString());
     if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
     const response = await request<{ success: boolean; data: any[]; total: number }>(`/commands?${queryParams}`);
     return { data: response.data, total: response.total };
   },
@@ -441,8 +442,11 @@ export const API = {
   },
 
   // 获取工人收到的派工指令
-  getReceivedCommands: async (): Promise<any[]> => {
-    const response = await request<{ success: boolean; data: any[] }>('/commands/received');
+  getReceivedCommands: async (params?: { status?: string; search?: string }): Promise<any[]> => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
+    const response = await request<{ success: boolean; data: any[] }>(`/commands/received?${queryParams}`);
     return response.success ? response.data : [];
   },
 

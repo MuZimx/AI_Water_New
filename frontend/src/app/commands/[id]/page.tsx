@@ -176,7 +176,6 @@ export default function CommandDetailPage() {
     switch (status) {
       case '未执行':
         return <Clock className="h-4 w-4 text-yellow-500" />;
-      case '已执行':
       case '已完成':
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       default:
@@ -188,7 +187,6 @@ export default function CommandDetailPage() {
     switch (status) {
       case '未执行':
         return 'bg-yellow-100 text-yellow-800';
-      case '已执行':
       case '已完成':
         return 'bg-green-100 text-green-800';
       default:
@@ -243,9 +241,9 @@ export default function CommandDetailPage() {
               <CardTitle className="text-xl">{command.title}</CardTitle>
               <span className={`flex items-center px-3 py-1 text-sm rounded-full ${getStatusColor(command.recipient_status || '未执行')}`}>
                 {getStatusIcon(command.recipient_status || '未执行')}
-                <span className="ml-1">{command.recipient_status === '已执行' ? '已完成' : (command.recipient_status || '未执行')}</span>
+                <span className="ml-1">{command.recipient_status || '未执行'}</span>
               </span>
-              {currentUser?.role !== '管理员' && (command.recipient_status !== '已执行' && command.recipient_status !== '已完成') && (
+              {currentUser?.role !== '管理员' && command.recipient_status !== '已完成' && (
                 <div className="w-[200px]">
                   <Select value={status} onValueChange={setStatus}>
                     <SelectTrigger>
@@ -253,7 +251,7 @@ export default function CommandDetailPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="未执行">未执行</SelectItem>
-                      <SelectItem value="已执行">已完成</SelectItem>
+                      <SelectItem value="已完成">已完成</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -282,7 +280,7 @@ export default function CommandDetailPage() {
               <p className="text-muted-foreground whitespace-pre-line">{command.content}</p>
             </div>
           </CardContent>
-          {currentUser?.role !== '管理员' && (command.recipient_status !== '已执行' && command.recipient_status !== '已完成') && (
+          {currentUser?.role !== '管理员' && command.recipient_status !== '已完成' && (
             <CardContent className="border-t">
               <Button
                 onClick={handleStatusUpdate}
@@ -343,9 +341,9 @@ export default function CommandDetailPage() {
                       <User className="h-4 w-4 text-primary" />
                       <span>{recipient.username}</span>
                     </div>
-                    <span className={`flex items-center px-3 py-1 text-sm rounded-full ${getStatusColor(recipient.status)}`}>
-                      {getStatusIcon(recipient.status)}
-                      <span className="ml-1">{recipient.status === '已执行' ? '已完成' : recipient.status}</span>
+                    <span className={`flex items-center px-3 py-1 text-sm rounded-full ${getStatusColor(recipient.status === '已完成' ? '已完成' : recipient.status)}`}>
+                      {getStatusIcon(recipient.status === '已完成' ? '已完成' : recipient.status)}
+                      <span className="ml-1">{recipient.status === '已完成' ? '已完成' : recipient.status}</span>
                     </span>
                   </div>
                 ))}
