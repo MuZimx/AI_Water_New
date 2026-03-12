@@ -179,6 +179,35 @@ export const API = {
     }
   },
 
+  getUsers: async (): Promise<User[]> => {
+    const response = await request<{ success: boolean; data: User[] }>('/users');
+    return response.success ? response.data : [];
+  },
+
+  deleteUser: async (id: number): Promise<void> => {
+    await request<{ success: boolean }>(`/users/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  batchRegisterWorkers: async (workers: Array<{ username: string; password: string; full_name?: string; phone?: string }>) => {
+    const response = await request<{
+      success: boolean;
+      data: {
+        total: number;
+        successCount: number;
+        failCount: number;
+        results: Array<{ username: string; success: boolean; userId?: number; message?: string }>;
+      };
+      message: string;
+    }>('/workers/batch-register', {
+      method: 'POST',
+      body: JSON.stringify({ workers }),
+    });
+
+    return response.data;
+  },
+
   // 文件管理
   getFiles: async (): Promise<AudioFile[]> => {
     const response = await request<{ success: boolean; data: AudioFile[] }>('/audio-files');

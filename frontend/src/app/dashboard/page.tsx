@@ -24,7 +24,8 @@ import {
   MapPin,
   CheckSquare,
   Send,
-  RotateCcw
+  RotateCcw,
+  Users
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -377,6 +378,10 @@ export default function DashboardPage() {
                 </DropdownMenuItem>
                 {currentUser?.role === '管理员' && (
                   <>
+                    <DropdownMenuItem onClick={() => router.push('/workers')}>
+                      <Users className="mr-2 h-4 w-4" />
+                      工人账号管理
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setResetDialogOpen(true)} className="text-orange-600 focus:bg-orange-50">
                       <RotateCcw className="mr-2 h-4 w-4" />

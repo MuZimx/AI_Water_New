@@ -894,6 +894,79 @@ app.get('/api/workers', authenticateToken, async (req, res) => {
   }
 });
 
+// 管理员批量注册工人账号
+app.post('/api/workers/batch-register', authenticateToken, async (req, res) => {
+  if (req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const { workers } = req.body;
+  if (!Array.isArray(workers) || workers.length === 0) {
+    return res.status(400).json({ success: false, message: 'workers 参数不能为空' });
+  }
+
+  const results = [];
+
+  for (const item of workers) {
+    const username = (item?.username || '').trim();
+    const password = (item?.password || '').trim();
+    const fullName = item?.full_name ? String(item.full_name).trim() : null;
+    const phone = item?.phone ? String(item.phone).trim() : null;
+
+    if (!username || !password) {
+      results.push({ username, success: false, message: '用户名或密码为空' });
+      continue;
+    }
+
+    if (password.length < 6 || password.length > 20) {
+      results.push({ username, success: false, message: '密码长度应在6到20个字符之间' });
+      continue;
+    }
+
+    try {
+      const exists = await prisma.users.findUnique({
+        where: { username },
+        select: { id: true }
+      });
+
+      if (exists) {
+        results.push({ username, success: false, message: '用户名已存在' });
+        continue;
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await prisma.users.create({
+        data: {
+          username,
+          password: hashedPassword,
+          role: '工人',
+          full_name: fullName,
+          phone
+        },
+        select: { id: true, username: true }
+      });
+
+      results.push({ username: user.username, userId: user.id, success: true });
+    } catch (error) {
+      results.push({ username, success: false, message: '创建失败' });
+    }
+  }
+
+  const successCount = results.filter(r => r.success).length;
+  const failCount = results.length - successCount;
+
+  return res.json({
+    success: true,
+    message: `批量注册完成：成功 ${successCount}，失败 ${failCount}`,
+    data: {
+      total: results.length,
+      successCount,
+      failCount,
+      results
+    }
+  });
+});
+
 // 创建派工指令接口
 app.post('/api/commands', authenticateToken, async (req, res) => {
   // 验证管理员权限
