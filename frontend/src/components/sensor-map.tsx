@@ -103,7 +103,8 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
         sensors.forEach((s: Sensor) => {
           const color = s.status === '严重漏水' ? '#ef4444' :
                        s.status === '轻微漏水' ? '#eab308' :
-                       s.status === '正常' ? '#22c55e' : '#6b7280';
+                       s.status === '传感器损坏' ? '#6b7280' :
+                       s.status === '正常' ? '#22c55e' : '#9ca3af';
           const icon = L.divIcon({
             className: 'custom-marker',
             html: `<div style="
@@ -118,7 +119,7 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
             iconAnchor: [12, 12]
           });
           const marker = L.marker([s.latitude, s.longitude], { icon });
-          const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水';
+          const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水' || s.status === '传感器损坏';
           const isAssigned = s.assigned === true;
           let buttons = '';
           if (isAbnormal) {
@@ -141,7 +142,7 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
           // 添加点击事件 - 只在点击时触发，不影响弹窗显示
           marker.on('click', () => {
             // 不阻止默认行为，让弹窗正常显示
-            if (onSensorClick && isAbnormal && isAdmin) {
+            if (onSensorClick && (s.status === '严重漏水' || s.status === '轻微漏水' || s.status === '传感器损坏') && isAdmin) {
               // 点击时记录选中的传感器，但仍然显示弹窗
               const sensorData = s;
               // 将传感器ID通过事件传递
@@ -233,11 +234,12 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
           sensors.forEach((s: Sensor) => {
             const color = s.status === '严重漏水' ? '#ef4444' :
                          s.status === '轻微漏水' ? '#eab308' :
-                         s.status === '正常' ? '#22c55e' : '#6b7280';
+                         s.status === '传感器损坏' ? '#6b7280' :
+                         s.status === '正常' ? '#22c55e' : '#9ca3af';
             const el = document.createElement('div');
             el.className = `rounded-full w-4 h-4 border-2 border-white`;
             el.style.backgroundColor = color;
-            const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水';
+            const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水' || s.status === '传感器损坏';
             const isAssigned = s.assigned === true;
             let buttons = '';
             if (isAbnormal) {
@@ -261,7 +263,7 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
 
             // 添加点击事件
             marker.getElement()?.addEventListener('click', () => {
-              if (onSensorClick && isAbnormal && isAdmin) {
+              if (onSensorClick && (s.status === '严重漏水' || s.status === '轻微漏水' || s.status === '传感器损坏') && isAdmin) {
                 if (typeof window !== 'undefined') {
                   (window as any).lastClickedSensor = s;
                 }
@@ -357,7 +359,8 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
       sensors.forEach((s: Sensor) => {
         const color = s.status === '严重漏水' ? '#ef4444' :
                      s.status === '轻微漏水' ? '#eab308' :
-                     s.status === '正常' ? '#22c55e' : '#6b7280';
+                     s.status === '传感器损坏' ? '#6b7280' :
+                     s.status === '正常' ? '#22c55e' : '#9ca3af';
         const icon = L.divIcon({
           className: 'custom-marker',
           html: `<div style="
@@ -372,7 +375,7 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
           iconAnchor: [12, 12]
         });
         const marker = L.marker([s.latitude, s.longitude], { icon });
-        const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水';
+        const isAbnormal = s.status === '严重漏水' || s.status === '轻微漏水' || s.status === '传感器损坏';
         const isAssigned = s.assigned === true;
         let buttons = '';
         if (isAbnormal) {
@@ -394,7 +397,7 @@ export default function SensorMap({ sensors, onSensorClick, isAdmin, onViewDetai
 
         // 添加点击事件
         marker.on('click', () => {
-          if (onSensorClick && isAbnormal && isAdmin) {
+          if (onSensorClick && (s.status === '严重漏水' || s.status === '轻微漏水' || s.status === '传感器损坏') && isAdmin) {
             if (typeof window !== 'undefined') {
               (window as any).lastClickedSensor = s;
             }
