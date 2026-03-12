@@ -196,6 +196,13 @@ export const API = {
     });
   },
 
+  setWorkerAccountStatus: async (id: number, status: '禁用' | '空闲'): Promise<void> => {
+    await request<{ success: boolean }>(`/users/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  },
+
   batchRegisterWorkers: async (workers: Array<{ username: string; password: string; full_name?: string; phone?: string }>) => {
     const response = await request<{
       success: boolean;

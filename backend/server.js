@@ -17,7 +17,7 @@ const {
 } = require('./utils/jwt');
 
 // JWT认证中间件
-const authenticateToken = (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -36,7 +36,38 @@ const authenticateToken = (req, res, next) => {
     });
   }
   
-  req.user = decoded;
+  try {
+    const user = await prisma.users.findUnique({
+      where: { id: decoded.id },
+      select: { id: true, role: true, worker_status: true }
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: '用户不存在或已失效'
+      });
+    }
+
+    if (user.role === '工人' && user.worker_status === '禁用') {
+      return res.status(403).json({
+        success: false,
+        message: '账号已被禁用，请联系管理员'
+      });
+    }
+
+    req.user = {
+      ...decoded,
+      role: user.role || decoded.role,
+      worker_status: user.worker_status
+    };
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: '服务器内部错误'
+    });
+  }
+
   next();
 };
 
@@ -296,6 +327,13 @@ app.post('/api/login', async (req, res) => {
       });
     }
 
+    if (user.role === '工人' && user.worker_status === '禁用') {
+      return res.status(403).json({
+        success: false,
+        message: '账号已被禁用，请联系管理员'
+      });
+    }
+
     const matched = await bcrypt.compare(password, user.password);
     if (!matched) {
       return res.status(401).json({
@@ -348,6 +386,7 @@ app.get('/api/users', authenticateToken, async (req, res) => {
         id: true,
         username: true,
         role: true,
+        worker_status: true,
         full_name: true,
         phone: true,
         created_at: true
@@ -379,6 +418,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
         id: true,
         username: true,
         role: true,
+        worker_status: true,
         full_name: true,
         phone: true,
         created_at: true
@@ -404,7 +444,7 @@ app.get('/api/users/profile', authenticateToken, async (req, res) => {
   }
 });
 
-// 删除用户接口 - 仅管理员可删除，且只能删除角色为 工人 的用户
+// 禁用用户接口 - 仅管理员可禁用，且只能禁用角色为 工人 的用户
 app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   // 验证管理员权限
   if (!req.user || req.user.role !== '管理员') {
@@ -424,19 +464,28 @@ app.delete('/api/users/:id', authenticateToken, async (req, res) => {
   try {
     const row = await prisma.users.findUnique({
       where: { id: targetId },
-      select: { id: true, role: true }
+      select: { id: true, role: true, worker_status: true }
     });
 
     if (!row) return res.status(404).json({ success: false, message: '用户不存在' });
 
     if (row.role !== '工人') {
-      return res.status(403).json({ success: false, message: '只能删除工人用户' });
+      return res.status(403).json({ success: false, message: '只能禁用工人用户' });
     }
 
-    await prisma.users.delete({ where: { id: targetId } });
-    return res.json({ success: true, message: '删除成功' });
+    if (row.worker_status === '禁用') {
+      return res.json({ success: true, message: '账号已处于禁用状态' });
+    }
+
+    await prisma.users.update({
+      where: { id: targetId },
+      data: { worker_status: '禁用' }
+    });
+
+    return res.json({ success: true, message: '禁用成功' });
   } catch (error) {
-    return res.status(500).json({ success: false, message: '删除失败' });
+    console.error('禁用工人用户失败:', error);
+    return res.status(500).json({ success: false, message: '禁用失败' });
   }
 });
 
@@ -893,7 +942,10 @@ app.get('/api/workers', authenticateToken, async (req, res) => {
 
   try {
     const rows = await prisma.users.findMany({
-      where: { role: '工人' },
+      where: {
+        role: '工人',
+        worker_status: { not: '禁用' }
+      },
       select: {
         id: true,
         username: true,
@@ -1960,5 +2012,47 @@ app.post('/api/commands/:id/feedback/photos', authenticateToken, commandFeedback
       try { fs.unlinkSync(file.path); } catch (e) {}
     });
     return res.status(500).json({ success: false, message: '保存照片记录失败' });
+  }
+});
+
+// 更新工人账号状态接口 - 仅管理员可操作
+app.put('/api/users/:id/status', authenticateToken, async (req, res) => {
+  if (!req.user || req.user.role !== '管理员') {
+    return res.status(403).json({ success: false, message: '权限不足' });
+  }
+
+  const targetId = parseInt(req.params.id, 10);
+  if (isNaN(targetId)) {
+    return res.status(400).json({ success: false, message: '无效的用户ID' });
+  }
+
+  const { status } = req.body;
+  if (!status || !['禁用', '空闲'].includes(status)) {
+    return res.status(400).json({ success: false, message: '无效的状态值' });
+  }
+
+  try {
+    const row = await prisma.users.findUnique({
+      where: { id: targetId },
+      select: { id: true, role: true }
+    });
+
+    if (!row) {
+      return res.status(404).json({ success: false, message: '用户不存在' });
+    }
+
+    if (row.role !== '工人') {
+      return res.status(403).json({ success: false, message: '只能操作工人用户' });
+    }
+
+    await prisma.users.update({
+      where: { id: targetId },
+      data: { worker_status: status }
+    });
+
+    return res.json({ success: true, message: status === '禁用' ? '禁用成功' : '启用成功' });
+  } catch (error) {
+    console.error('更新工人账号状态失败:', error);
+    return res.status(500).json({ success: false, message: '状态更新失败' });
   }
 });

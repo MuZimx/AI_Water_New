@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Trash2, Users, Upload } from 'lucide-react';
+import { ArrowLeft, Trash2, Users, Upload, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -94,14 +94,27 @@ export default function WorkerManagePage() {
     }
   };
 
-  const handleDeleteWorker = async (id: number) => {
+  const handleDisableWorker = async (id: number) => {
     try {
       setLoading(true);
       await API.deleteUser(id);
-      toast({ title: '删除成功', description: '工人账号已删除' });
+      toast({ title: '禁用成功', description: '工人账号已禁用' });
       await loadWorkers();
     } catch (error: any) {
-      toast({ variant: 'destructive', title: '删除失败', description: error.message || '请求失败' });
+      toast({ variant: 'destructive', title: '禁用失败', description: error.message || '请求失败' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEnableWorker = async (id: number) => {
+    try {
+      setLoading(true);
+      await API.setWorkerAccountStatus(id, '空闲');
+      toast({ title: '启用成功', description: '工人账号已启用' });
+      await loadWorkers();
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: '启用失败', description: error.message || '请求失败' });
     } finally {
       setLoading(false);
     }
@@ -142,26 +155,47 @@ export default function WorkerManagePage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Users className="h-4 w-4" /> 工人账号列表</CardTitle>
-            <CardDescription>可查看并删除工人账号</CardDescription>
+            <CardDescription>可查看并禁用/启用工人账号（禁用账号会被阻止登录）</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {workers.length === 0 ? (
               <p className="text-sm text-muted-foreground">暂无工人账号</p>
             ) : (
               workers.map(worker => (
-                <div key={worker.id} className="flex items-center justify-between border rounded-md p-3">
+                <div
+                  key={worker.id}
+                  className={`flex items-center justify-between border rounded-md p-3 ${worker.worker_status === '禁用' ? 'bg-muted/40 border-muted-foreground/30' : ''}`}
+                >
                   <div>
-                    <p className="font-medium">{worker.full_name || worker.username}</p>
+                    <p className="font-medium flex items-center gap-2">
+                      <span>{worker.full_name || worker.username}</span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${worker.worker_status === '禁用' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}
+                      >
+                        {worker.worker_status === '禁用' ? '已禁用' : '正常'}
+                      </span>
+                    </p>
                     <p className="text-xs text-muted-foreground">账号：{worker.username} · 电话：{worker.phone || '未填写'}</p>
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={loading}
-                    onClick={() => handleDeleteWorker(worker.id)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-1" /> 删除
-                  </Button>
+                  {worker.worker_status === '禁用' ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={loading}
+                      onClick={() => handleEnableWorker(worker.id)}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-1" /> 启用
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={loading}
+                      onClick={() => handleDisableWorker(worker.id)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" /> 禁用
+                    </Button>
+                  )}
                 </div>
               ))
             )}
