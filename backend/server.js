@@ -1074,10 +1074,12 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
   try {
     const commandId = parseInt(id, 10);
     let feedbackId = null;
+    let maintenanceRecordId = null;
+
     await prisma.$transaction(async (tx) => {
       const command = await tx.commands.findUnique({
         where: { id: commandId },
-        select: { sensor_id: true }
+        select: { sensor_id: true, title: true, content: true }
       });
       if (!command) {
         throw new Error('NOT_FOUND');
@@ -1088,6 +1090,44 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
       });
       if (!recipient) {
         throw new Error('NOT_FOUND');
+      }
+
+      // 创建检修记录
+      const maintenanceRecord = await tx.maintenance_records.create({
+        data: {
+          user_id: req.user.id,
+          title: command.title || '维修反馈',
+          content: feedbackText || command.content || ''
+        }
+      });
+      maintenanceRecordId = maintenanceRecord.id;
+
+      // 如果命令关联了传感器，则将传感器关联到检修记录
+      if (command.sensor_id) {
+        const sensor = await tx.sensors.findUnique({
+          where: { id: command.sensor_id },
+          select: { id: true, name: true }
+        });
+        if (sensor) {
+          await tx.maintenance_sensors.create({
+            data: {
+              maintenance_id: maintenanceRecordId,
+              sensor_id: sensor.id,
+              sensor_name: sensor.name
+            }
+          });
+        }
+      }
+
+      // 如果有上传的照片，则将照片关联到检修记录
+      if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+        await tx.maintenance_photos.createMany({
+          data: req.files.map(file => ({
+            maintenance_id: maintenanceRecordId,
+            filename: file.filename,
+            original_name: file.originalname
+          }))
+        });
       }
 
       await tx.command_recipients.update({
@@ -1136,8 +1176,8 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
       }
     });
 
-    console.log('反馈提交成功, feedbackId:', feedbackId);
-    res.json({ success: true, message: '反馈提交成功', photos: photoUrls, feedbackId, id: feedbackId });
+    console.log('反馈提交成功, feedbackId:', feedbackId, 'maintenanceRecordId:', maintenanceRecordId);
+    res.json({ success: true, message: '反馈提交成功', photos: photoUrls, feedbackId, id: feedbackId, maintenanceRecordId });
   } catch (error) {
     console.error('提交反馈失败:', error);
     if (error.message === 'NOT_FOUND') {
