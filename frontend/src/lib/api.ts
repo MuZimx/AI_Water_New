@@ -1,6 +1,9 @@
 // 真实后端 API 客户端
 // 配置后端服务器地址
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+const rawApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+const API_BASE_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/?$/i.test(rawApiBaseUrl)
+  ? '/api'
+  : rawApiBaseUrl;
 export const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
 export type RiskLevel = '高风险' | '中风险' | '低风险' | '未检测';
