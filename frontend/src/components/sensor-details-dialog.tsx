@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { API } from '@/lib/api';
+import { API, FILE_BASE_URL } from '@/lib/api';
 import { Clock, CheckCircle, AlertCircle, User, Image as ImageIcon, X } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -45,10 +45,8 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
     setLoading(true);
     try {
       // 获取所有与该传感器相关的指令
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}/api/commands?sensor_id=${sensorId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
+      const response = await fetch(`${FILE_BASE_URL}/api/commands?sensor_id=${sensorId}`, {
+        credentials: 'include'
       });
       const data = await response.json();
 
@@ -56,12 +54,8 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
         // 对每个指令获取详情
                 const allFeedbacks = await Promise.all(
                   data.data.map(async (cmd: any) => {
-                    // 直接使用 fetch 请求单个指令详情（后端应提供 GET /api/commands/:id）
-                    const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000';
-                    const res = await fetch(`${base}/api/commands/${cmd.id}`, {
-                      headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-                      }
+                    const res = await fetch(`${FILE_BASE_URL}/api/commands/${cmd.id}`, {
+                      credentials: 'include'
                     });
                     const detailsResp = await res.json();
                     // 兼容后端返回单个对象或数组的情况，最终保证返回数组
@@ -160,7 +154,7 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
                               onClick={() => setSelectedImage(photo)}
                             >
                               <img
-                                src={`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}${photo}`}
+                                src={`${FILE_BASE_URL}${photo}`}
                                 alt={`照片${idx + 1}`}
                                 className="w-full h-full object-cover"
                               />
@@ -197,7 +191,7 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
         >
           <div className="relative max-w-4xl max-h-[90vh]">
             <img
-              src={`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}${selectedImage}`}
+              src={`${FILE_BASE_URL}${selectedImage}`}
               alt="预览"
               className="max-w-full max-h-[90vh] object-contain rounded-lg"
             />

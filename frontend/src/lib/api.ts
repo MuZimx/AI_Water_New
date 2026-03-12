@@ -47,7 +47,7 @@ export interface RegisterRequest {
   password: string;
   full_name?: string;
   phone?: string;
-  role: '工人' | '管理员';
+  role?: '工人';
 }
 
 export interface UploadResponse {
@@ -80,19 +80,11 @@ async function request<T>(
     ...options.headers,
   };
 
-  // 如果有 token（仅在浏览器环境），添加认证头
-  let token: string | null = null;
-  if (typeof window !== 'undefined' && window.localStorage) {
-    token = localStorage.getItem('auth_token');
-  }
-  if (token) {
-    (defaultHeaders as any)['Authorization'] = `Bearer ${token}`;
-  }
-
   try {
     const response = await fetch(url, {
       ...options,
       headers: defaultHeaders,
+      credentials: 'include',
     });
 
     // 更稳健地处理返回：优先解析 JSON，否则读取为文本（可能是空或 HTML 错误页）
@@ -138,42 +130,43 @@ export const API = {
 
   // 用户认证
   login: async (credentials: LoginRequest): Promise<{ user: User; token: string }> => {
-    const response = await request<{ success: boolean; data: { accessToken: string; refreshToken: string; user: User } }>('/login', {
+    const response = await request<{ success: boolean; data: { user: User } }>('/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
 
     if (response.success && response.data) {
-      localStorage.setItem('auth_token', response.data.accessToken);
       return {
         user: response.data.user,
-        token: response.data.accessToken
+        token: ''
       };
     }
     throw new Error('登录失败');
   },
 
-  // 注册（前端调用：允许选择角色 工人/管理员）
+  // 注册（公开注册仅允许创建工人账号）
   register: async (payload: RegisterRequest): Promise<{ user: User; token?: string }> => {
-    // 假设后端开放 /register 或 /users/register 路径处理公开注册
     const endpoint = '/register';
-    const response = await request<{ success: boolean; data: { user: User; accessToken?: string } }>(endpoint, {
+    const response = await request<{ success: boolean; data: { user: User } }>(endpoint, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        role: '工人',
+      }),
     });
 
     if (response.success && response.data) {
-      // 若后端返回 token，则保存
-      if (response.data.accessToken) {
-        localStorage.setItem('auth_token', response.data.accessToken);
-      }
-      return { user: response.data.user, token: response.data.accessToken };
+      return { user: response.data.user, token: '' };
     }
     throw new Error('注册失败');
   },
 
   logout: async (): Promise<void> => {
-    localStorage.removeItem('auth_token');
+    try {
+      await request<{ success: boolean }>('/auth/logout', {
+        method: 'POST',
+      });
+    } catch {}
   },
 
   getCurrentUser: async (): Promise<User | null> => {
@@ -234,36 +227,13 @@ export const API = {
       formData.append('sensor_id', sensorId.toString());
     }
 
-    const token = localStorage.getItem('auth_token');
-    const url = `${API_BASE_URL}/upload-audio`;
+    const responseData = await request<any>('/upload-audio', {
+      method: 'POST',
+      body: formData,
+      headers: {},
+    });
 
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
-        body: formData,
-      });
-
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new ApiError(
-          responseData?.message || '上传失败',
-          response.status,
-          responseData
-        );
-      }
-
-      // 返回上传后的文件信息（需要根据实际返回格式调整）
-      return responseData.file || responseData.data || {};
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      throw new ApiError('网络错误，请检查连接', 0);
-    }
+    return responseData.file || responseData.data || {};
   },
 
   deleteFile: async (id: number): Promise<void> => {
@@ -404,37 +374,21 @@ export const API = {
       });
     }
 
-    const token = localStorage.getItem('auth_token');
-    const url = `${API_BASE_URL}/commands/${id}/feedback`;
-
     try {
-      const response = await fetch(url, {
+      const responseData = await request<any>(`/commands/${id}/feedback`, {
         method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
         body: formData,
+        headers: {},
       });
 
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new ApiError(
-          responseData?.message || '提交反馈失败',
-          response.status,
-          responseData
-        );
-      }
-
-      // 返回正确格式的数据
       if (responseData.success) {
         return {
           id: responseData.id || responseData.feedbackId,
           photos: responseData.photos || []
         };
-      } else {
-        throw new ApiError(responseData.message || '提交反馈失败', response.status, responseData);
       }
+
+      throw new ApiError(responseData.message || '提交反馈失败', 500, responseData);
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;

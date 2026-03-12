@@ -18,7 +18,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<'工人' | '管理员'>('工人');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -39,7 +38,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await API.register({ username, password, full_name: fullName, phone, role });
+      await API.register({ username, password, full_name: fullName, phone });
       toast({ title: '注册成功', description: '账户已创建，请登录或已自动登录。' });
       router.push('/');
     } catch (err: any) {
@@ -57,7 +56,7 @@ export default function RegisterPage() {
             <CardTitle className="flex items-center gap-2 text-xl font-headline">
               <UserPlus className="h-5 w-5 text-secondary" /> 注册新账户
             </CardTitle>
-            <CardDescription>填写信息完成注册。请选择角色（工人 / 管理员）。</CardDescription>
+            <CardDescription>填写信息完成注册。公开注册仅创建工人账号。</CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
@@ -85,14 +84,6 @@ export default function RegisterPage() {
               <div className="space-y-2">
                 <Label htmlFor="phone">电话（可选）</Label>
                 <Input id="phone" placeholder="手机号" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">角色</Label>
-                <select id="role" aria-label="角色" className="w-full border rounded-md h-10 px-3" value={role} onChange={(e) => setRole(e.target.value as any)}>
-                  <option value="工人">工人</option>
-                  <option value="管理员">管理员</option>
-                </select>
               </div>
             </CardContent>
             <CardFooter>
