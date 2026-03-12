@@ -13,6 +13,11 @@ export interface AudioFile {
   size: number;
   upload_time: string;
   user_id: number;
+  sensor_id?: number;
+  sensor?: {
+    id: number;
+    name: string;
+  };
   risk_level: RiskLevel;
   confidence: number;
   status?: 'processing' | 'completed' | 'error'; // 前端计算字段，后端不返回

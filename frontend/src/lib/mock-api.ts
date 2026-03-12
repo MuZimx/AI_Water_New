@@ -15,6 +15,11 @@ export interface AudioFile {
   size: number;
   upload_time: string;
   user_id: string;
+  sensor_id?: string;
+  sensor?: {
+    id: string;
+    name: string;
+  };
   risk_level: RiskLevel;
   confidence: number;
   status: 'processing' | 'completed' | 'error';

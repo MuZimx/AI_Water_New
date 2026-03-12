@@ -693,6 +693,12 @@ export default function DashboardPage() {
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
                             <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                             <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            {file.sensor && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <span className="text-primary font-medium">传感器: {file.sensor.name}</span>
+                              </>
+                            )}
                             {file.status === 'completed' && file.risk_level !== '未检测' && (
                               <>
                                 <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
@@ -751,6 +757,12 @@ export default function DashboardPage() {
                           </div>
                           <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
+                            {file.sensor && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <span className="text-destructive font-medium">传感器: {file.sensor.name}</span>
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -796,6 +808,12 @@ export default function DashboardPage() {
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
                             <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
                             <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            {file.sensor && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <span className="text-primary font-medium">传感器: {file.sensor.name}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </CardContent>

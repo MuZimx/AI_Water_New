@@ -451,14 +451,29 @@ app.get('/api/audio-files', authenticateToken, async (req, res) => {
       prisma.audio_files.findMany({
         orderBy: { id: 'desc' },
         skip: offset,
-        take: size
+        take: size,
+        include: {
+          sensors: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
       }),
       prisma.audio_files.count()
     ]);
 
+    // 将 sensors 转换为 sensor 以匹配前端接口
+    const formattedRows = rows.map(row => ({
+      ...row,
+      sensor: row.sensors || null,
+      sensors: undefined
+    }));
+
     res.json({
       success: true,
-      data: rows,
+      data: formattedRows,
       total
     });
   } catch (error) {
