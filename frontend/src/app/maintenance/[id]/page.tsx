@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { API, type User as TUser } from '@/lib/api';
+import { API, FILE_BASE_URL, type User as TUser } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -257,7 +257,7 @@ export default function MaintenanceDetailPage() {
                 {record.photos.map((photo) => (
                   <div key={photo.id} className="relative">
                     <img
-                      src={`http://localhost:3001/uploads/maintenance/${photo.filename}`}
+                      src={`${FILE_BASE_URL}/uploads/maintenance/${photo.filename}`}
                       alt={photo.original_name}
                       className="w-full h-40 object-cover rounded-lg border"
                     />

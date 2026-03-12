@@ -1,6 +1,11 @@
 const fetch = require('node-fetch');
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = process.env.API_BASE_URL;
+
+if (!API_BASE) {
+  console.error('缺少环境变量 API_BASE_URL，例如: http://127.0.0.1:3001/api');
+  process.exit(1);
+}
 
 async function testCommandsAPI() {
   console.log('=== 测试命令管理API ===\n');

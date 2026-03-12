@@ -19,7 +19,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { API, type User } from '@/lib/api';
+import { API, FILE_BASE_URL, type User as ApiUser } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -76,7 +76,7 @@ export default function CommandDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<ApiUser | null>(null);
   const [command, setCommand] = useState<Command | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('');
@@ -313,7 +313,7 @@ export default function CommandDetailPage() {
                       </div>
                     </div>
                     <a 
-                      href={`http://localhost:3001/uploads/commands/${attachment.filename}`}
+                      href={`${FILE_BASE_URL}/uploads/commands/${attachment.filename}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-primary hover:underline"
@@ -448,7 +448,7 @@ export default function CommandDetailPage() {
                         {feedback.photos.map((photo) => (
                           <div key={photo.id} className="relative">
                             <img
-                              src={`http://localhost:3001/uploads/command_feedback/${photo.filename}`}
+                              src={`${FILE_BASE_URL}/uploads/command_feedback/${photo.filename}`}
                               alt={photo.original_name}
                               className="w-full h-32 object-cover rounded-lg border"
                             />
@@ -477,7 +477,7 @@ export default function CommandDetailPage() {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <User className="h-4 w-4 text-primary" />
-                    <span className="font-medium">{currentUser.username}</span>
+                    <span className="font-medium">{currentUser?.username || '-'}</span>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     {format(new Date(command.feedback.created_at), 'yyyy-MM-dd HH:mm')}
@@ -489,7 +489,7 @@ export default function CommandDetailPage() {
                     {command.feedback.photos.map((photo) => (
                       <div key={photo.id} className="relative">
                         <img
-                          src={`http://localhost:3001/uploads/command_feedback/${photo.filename}`}
+                          src={`${FILE_BASE_URL}/uploads/command_feedback/${photo.filename}`}
                           alt={photo.original_name}
                           className="w-full h-32 object-cover rounded-lg border"
                         />

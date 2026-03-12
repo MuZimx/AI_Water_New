@@ -176,9 +176,8 @@ export default function DashboardPage() {
 
   const loadSensors = async () => {
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3001'}/api/sensors`);
-      const data = await res.json();
-      if (data && data.success) setSensors(data.data || []);
+      const data = await API.getSensors();
+      setSensors(data || []);
     } catch (e) {
       console.error('加载传感器失败', e);
     }
