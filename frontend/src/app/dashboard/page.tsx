@@ -617,13 +617,10 @@ export default function DashboardPage() {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full sm:w-[400px] grid-cols-4 bg-muted/50 p-1">
+            <TabsList className="grid w-full sm:w-[400px] grid-cols-3 bg-muted/50 p-1">
               <TabsTrigger value="all" className="text-xs sm:text-sm">所有样本</TabsTrigger>
               <TabsTrigger value="high" className="text-xs sm:text-sm text-destructive data-[state=active]:text-destructive">高风险</TabsTrigger>
               <TabsTrigger value="processing" className="text-xs sm:text-sm">分析中</TabsTrigger>
-              {currentUser?.role === '工人' && (
-                <TabsTrigger value="tasks" className="text-xs sm:text-sm">维修任务</TabsTrigger>
-              )}
             </TabsList>
 
             <TabsContent value="all" className="mt-6 space-y-4">
@@ -780,21 +777,6 @@ export default function DashboardPage() {
                 </div>
               )}
             </TabsContent>
-
-            {currentUser?.role === '工人' && (
-              <TabsContent value="tasks" className="mt-6 space-y-4" id="tasks-section">
-                <WorkerNotifications
-                  currentUser={currentUser}
-                  onStatusChange={() => {
-                    // 刷新工人状态
-                    API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
-                  }}
-                  onRefreshSensors={loadSensors}
-                  fromBanner={false}
-                  inDialog={false}
-                />
-              </TabsContent>
-            )}
           </Tabs>
         </div>
 
