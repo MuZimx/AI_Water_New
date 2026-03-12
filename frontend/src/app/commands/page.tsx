@@ -131,12 +131,17 @@ export default function CommandsPage() {
               {currentUser?.role === '管理员' ? '管理和发布命令' : '查看和执行命令'}
             </p>
           </div>
-          {currentUser?.role === '管理员' && (
-            <Button onClick={handleCreateCommand} className="bg-primary hover:bg-primary/90">
-              <Plus className="h-4 w-4 mr-2" />
-              创建命令
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => router.push('/dashboard')}>
+              返回主页
             </Button>
-          )}
+            {currentUser?.role === '管理员' && (
+              <Button onClick={handleCreateCommand} className="bg-primary hover:bg-primary/90">
+                <Plus className="h-4 w-4 mr-2" />
+                创建命令
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* 过滤器 */}

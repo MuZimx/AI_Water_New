@@ -126,10 +126,15 @@ export default function MaintenancePage() {
             <h1 className="text-2xl md:text-3xl font-bold text-primary mb-2">检修记录管理</h1>
             <p className="text-muted-foreground">管理和跟踪所有检修活动</p>
           </div>
-          <Button onClick={handleCreateRecord} className="bg-primary hover:bg-primary/90">
-            <Plus className="h-4 w-4 mr-2" />
-            创建检修记录
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => router.push('/dashboard')}>
+              返回主页
+            </Button>
+            <Button onClick={handleCreateRecord} className="bg-primary hover:bg-primary/90">
+              <Plus className="h-4 w-4 mr-2" />
+              创建检修记录
+            </Button>
+          </div>
         </div>
 
         {/* 过滤器 */}
