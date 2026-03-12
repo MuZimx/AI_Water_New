@@ -341,6 +341,13 @@ export const API = {
     return response.success ? response.data : [];
   },
 
+  updateSensorStatus: async (id: number, status: string): Promise<void> => {
+    await request<{ success: boolean }>(`/sensors/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  },
+
   uploadCommandAttachments: async (id: number, attachments: File[]): Promise<Array<{ filename: string; originalName: string }>> => {
     const formData = new FormData();
     attachments.forEach((attachment) => {

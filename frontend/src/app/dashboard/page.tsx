@@ -359,6 +359,12 @@ export default function DashboardPage() {
                 <MessageSquare className="h-4 w-4 mr-2" />
                 <span>命令管理</span>
               </Button>
+              {currentUser?.role === '管理员' && (
+                <Button variant="ghost" className="h-10 px-3" onClick={() => router.push('/sensors')}>
+                  <MapPin className="h-4 w-4 mr-2" />
+                  <span>传感器管理</span>
+                </Button>
+              )}
             </div>
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-secondary/10 rounded-full border border-secondary/20 mr-2">
               <div className="h-2 w-2 rounded-full bg-secondary animate-pulse" />
@@ -381,6 +387,10 @@ export default function DashboardPage() {
                 </DropdownMenuItem>
                 {currentUser?.role === '管理员' && (
                   <>
+                    <DropdownMenuItem onClick={() => router.push('/sensors')}>
+                      <MapPin className="mr-2 h-4 w-4" />
+                      传感器管理
+                    </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => router.push('/workers')}>
                       <Users className="mr-2 h-4 w-4" />
                       工人账号管理
