@@ -90,10 +90,6 @@ export default function ProfilePage() {
                       <span className="text-white/60">用户ID</span>
                       <span className="font-mono">{user?.id ? String(user.id).slice(0, 8) : 'Loading...'}</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-white/60">上次轮换</span>
-                      <span>2024年3月14日</span>
-                    </div>
                   </div>
                </CardContent>
             </Card>
