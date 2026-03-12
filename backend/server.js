@@ -1138,7 +1138,6 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
         }
       });
 
-      await tx.users.update({ where: { id: req.user.id }, data: { worker_status: '空闲' } });
       await tx.commands.update({ where: { id: commandId }, data: { status: '已完成' } });
 
       if (feedbackText) {
@@ -1173,6 +1172,7 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
 
       if (update_sensor === 'true' && command.sensor_id) {
         await tx.sensors.update({ where: { id: command.sensor_id }, data: { status: '正常' } });
+        await tx.users.update({ where: { id: req.user.id }, data: { worker_status: '空闲' } });
       }
     });
 
