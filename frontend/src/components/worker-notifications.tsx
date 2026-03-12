@@ -31,6 +31,8 @@ interface Command {
   feedback: string;
   response_time: string;
   photos?: string[];
+  sensor_id?: number | null;
+  sensor_status?: string;
 }
 
 interface WorkerNotificationsProps {
@@ -148,7 +150,11 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, sensorStatus?: string) => {
+    // 如果传感器不是"正常"，即使任务状态是"已完成"，也显示"进行中"
+    if (status === '已完成' && sensorStatus !== '正常') {
+      return <Badge className="bg-yellow-100 text-yellow-700"><AlertCircle className="h-3 w-3 mr-1" />进行中</Badge>;
+    }
     switch (status) {
       case '已发布':
         return <Badge className="bg-blue-100 text-blue-700"><Clock className="h-3 w-3 mr-1" />待处理</Badge>;
@@ -181,7 +187,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
             <div className="flex items-start justify-between">
               <div className="space-y-1 flex-1">
                 <div className="flex items-center gap-2">
-                  {getStatusBadge(selectedCommand.status)}
+                  {getStatusBadge(selectedCommand.status, selectedCommand.sensor_status)}
                 </div>
                 <CardTitle className="text-lg">{selectedCommand.title}</CardTitle>
                 <CardDescription className="flex items-center gap-4 text-xs">
@@ -242,7 +248,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
                   <div className="flex items-start justify-between">
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2">
-                        {getStatusBadge(command.status)}
+                        {getStatusBadge(command.status, command.sensor_status)}
                         {!command.read_status && (
                           <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                         )}
@@ -279,8 +285,8 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
         )
       )}
 
-      {/* 反馈表单 */}
-      {selectedCommand && selectedCommand.status !== '已完成' && (
+      {/* 反馈表单 - 只要传感器状态不是"正常"就允许继续提交 */}
+      {selectedCommand && selectedCommand.sensor_status !== '正常' && (
         <Card className="border-primary shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg">提交维修反馈</CardTitle>
@@ -378,12 +384,12 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
         </Card>
       )}
 
-      {selectedCommand && selectedCommand.status === '已完成' && (
+      {selectedCommand && selectedCommand.sensor_status === '正常' && (
         <Card className="border-green-200 bg-green-50/50">
           <CardContent className="py-6 text-center">
             <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
             <h3 className="font-medium text-green-800">任务已完成</h3>
-            <p className="text-sm text-green-700 mt-1">您已提交该维修任务的反馈</p>
+            <p className="text-sm text-green-700 mt-1">您已提交该维修任务的反馈，传感器状态已更新为"正常"</p>
           </CardContent>
         </Card>
       )}

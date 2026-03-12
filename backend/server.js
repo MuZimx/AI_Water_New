@@ -960,7 +960,13 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
     const rows = await prisma.command_recipients.findMany({
       where: { user_id: req.user.id },
       include: {
-        commands: true,
+        commands: {
+          include: {
+            sensors: {
+              select: { id: true, status: true }
+            }
+          }
+        },
         users: {
           select: { username: true, full_name: true }
         }
@@ -974,7 +980,9 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
       read_at: item.read_at,
       completed_at: item.completed_at,
       worker_name: item.users.username,
-      worker_full_name: item.users.full_name
+      worker_full_name: item.users.full_name,
+      sensor_id: item.commands.sensors?.id || null,
+      sensor_status: item.commands.sensors?.status || null
     }));
 
     res.json({ success: true, data });
@@ -1130,15 +1138,28 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
         });
       }
 
-      await tx.command_recipients.update({
-        where: { id: recipient.id },
-        data: {
-          status: '已完成',
-          completed_at: new Date()
-        }
-      });
+      // 只在勾选"维修完成"时，才将任务状态更新为"已完成"
+      if (update_sensor === 'true') {
+        await tx.command_recipients.update({
+          where: { id: recipient.id },
+          data: {
+            status: '已完成',
+            completed_at: new Date()
+          }
+        });
 
-      await tx.commands.update({ where: { id: commandId }, data: { status: '已完成' } });
+        await tx.commands.update({ where: { id: commandId }, data: { status: '已完成' } });
+      } else {
+        // 否则更新为"进行中"状态
+        await tx.command_recipients.update({
+          where: { id: recipient.id },
+          data: {
+            status: '进行中'
+          }
+        });
+
+        await tx.commands.update({ where: { id: commandId }, data: { status: '进行中' } });
+      }
 
       if (feedbackText) {
         const existingFeedback = await tx.command_feedbacks.findFirst({
