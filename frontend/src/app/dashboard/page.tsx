@@ -371,11 +371,9 @@ export default function DashboardPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 z-[10000]">
-                <DropdownMenuLabel>账户设置</DropdownMenuLabel>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => router.push('/profile')}>
                   <Settings className="mr-2 h-4 w-4" />
-                  安全令牌管理
+                  个人中心
                 </DropdownMenuItem>
                 {currentUser?.role === '管理员' && (
                   <>
@@ -389,7 +387,7 @@ export default function DashboardPage() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:bg-destructive/10">
                   <LogOut className="mr-2 h-4 w-4" />
-                  断开会话
+                  注销
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
