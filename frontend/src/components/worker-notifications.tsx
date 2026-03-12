@@ -38,9 +38,10 @@ interface WorkerNotificationsProps {
   onStatusChange?: () => void;
   onRefreshSensors?: () => void;
   fromBanner?: boolean;
+  inDialog?: boolean;
 }
 
-export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSensors, fromBanner }: WorkerNotificationsProps) {
+export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSensors, fromBanner, inDialog }: WorkerNotificationsProps) {
   const { toast } = useToast();
   const [commands, setCommands] = useState<Command[]>([]);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
@@ -59,19 +60,19 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
     }
   }, [currentUser]);
 
-  // 从横幅进入时，自动选择待处理的指令
+  // 从横幅或弹窗进入时，自动选择待处理的指令
   useEffect(() => {
-    if (fromBanner && selectedCommand === null && commands.length > 0) {
+    if ((fromBanner || inDialog) && selectedCommand === null && commands.length > 0) {
       const pendingCommand = commands.find(cmd => cmd.status !== '已完成' && cmd.status !== '已取消') || commands[0];
       if (pendingCommand) {
         setSelectedCommand(pendingCommand);
       }
     }
-    // 退出横幅模式时，清空选中的指令
-    if (!fromBanner && selectedCommand !== null) {
+    // 退出横幅模式或弹窗模式时，清空选中的指令
+    if (!fromBanner && !inDialog && selectedCommand !== null) {
       setSelectedCommand(null);
     }
-  }, [fromBanner, commands]); // 移除 selectedCommand 依赖避免无限循环
+  }, [fromBanner, inDialog, commands]); // 移除 selectedCommand 依赖避免无限循环
 
   const loadCommands = async () => {
     try {
@@ -166,7 +167,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
 
   return (
     <div className="space-y-6">
-      {!fromBanner && (
+      {!fromBanner && !inDialog && (
         <div>
           <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">维修指令</h2>
           <p className="text-xs text-muted-foreground">当前共有 {commands.length} 条待处理指令</p>
@@ -174,7 +175,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
       )}
 
       {/* 横幅模式下显示当前选中的指令详情 */}
-      {fromBanner && selectedCommand && (
+      {(fromBanner || inDialog) && selectedCommand && (
         <Card className="border-primary shadow-lg bg-primary/5">
           <CardHeader>
             <div className="flex items-start justify-between">
@@ -211,7 +212,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
         </Card>
       )}
 
-      {!fromBanner && commands.length === 0 ? (
+      {!fromBanner && !inDialog && commands.length === 0 ? (
         <Card className="border-dashed border-2 bg-transparent">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <FileText className="h-12 w-12 text-muted-foreground/30 mb-4" />
@@ -222,7 +223,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
           </CardContent>
         </Card>
       ) : (
-        !fromBanner && (
+        !fromBanner && !inDialog && (
           <div className="space-y-4">
             {commands.map((command) => (
               <Card
