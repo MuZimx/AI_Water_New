@@ -31,6 +31,8 @@ interface Command {
   feedback: string;
   response_time: string;
   photos?: string[];
+  sensor_id?: number | null;
+  sensor_status?: string;
 }
 
 interface WorkerNotificationsProps {
@@ -38,9 +40,10 @@ interface WorkerNotificationsProps {
   onStatusChange?: () => void;
   onRefreshSensors?: () => void;
   fromBanner?: boolean;
+  inDialog?: boolean;
 }
 
-export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSensors, fromBanner }: WorkerNotificationsProps) {
+export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSensors, fromBanner, inDialog }: WorkerNotificationsProps) {
   const { toast } = useToast();
   const [commands, setCommands] = useState<Command[]>([]);
   const [selectedCommand, setSelectedCommand] = useState<Command | null>(null);
@@ -59,19 +62,19 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
     }
   }, [currentUser]);
 
-  // 从横幅进入时，自动选择待处理的指令
+  // 从横幅或弹窗进入时，自动选择待处理的指令
   useEffect(() => {
-    if (fromBanner && selectedCommand === null && commands.length > 0) {
+    if ((fromBanner || inDialog) && selectedCommand === null && commands.length > 0) {
       const pendingCommand = commands.find(cmd => cmd.status !== '已完成' && cmd.status !== '已取消') || commands[0];
       if (pendingCommand) {
         setSelectedCommand(pendingCommand);
       }
     }
-    // 退出横幅模式时，清空选中的指令
-    if (!fromBanner && selectedCommand !== null) {
+    // 退出横幅模式或弹窗模式时，清空选中的指令
+    if (!fromBanner && !inDialog && selectedCommand !== null) {
       setSelectedCommand(null);
     }
-  }, [fromBanner, commands]); // 移除 selectedCommand 依赖避免无限循环
+  }, [fromBanner, inDialog, commands]); // 移除 selectedCommand 依赖避免无限循环
 
   const loadCommands = async () => {
     try {
@@ -147,7 +150,11 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, sensorStatus?: string) => {
+    // 如果传感器不是"正常"，即使任务状态是"已完成"，也显示"进行中"
+    if (status === '已完成' && sensorStatus !== '正常') {
+      return <Badge className="bg-yellow-100 text-yellow-700"><AlertCircle className="h-3 w-3 mr-1" />进行中</Badge>;
+    }
     switch (status) {
       case '已发布':
         return <Badge className="bg-blue-100 text-blue-700"><Clock className="h-3 w-3 mr-1" />待处理</Badge>;
@@ -166,7 +173,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
 
   return (
     <div className="space-y-6">
-      {!fromBanner && (
+      {!fromBanner && !inDialog && (
         <div>
           <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">维修指令</h2>
           <p className="text-xs text-muted-foreground">当前共有 {commands.length} 条待处理指令</p>
@@ -174,13 +181,13 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
       )}
 
       {/* 横幅模式下显示当前选中的指令详情 */}
-      {fromBanner && selectedCommand && (
+      {(fromBanner || inDialog) && selectedCommand && (
         <Card className="border-primary shadow-lg bg-primary/5">
           <CardHeader>
             <div className="flex items-start justify-between">
               <div className="space-y-1 flex-1">
                 <div className="flex items-center gap-2">
-                  {getStatusBadge(selectedCommand.status)}
+                  {getStatusBadge(selectedCommand.status, selectedCommand.sensor_status)}
                 </div>
                 <CardTitle className="text-lg">{selectedCommand.title}</CardTitle>
                 <CardDescription className="flex items-center gap-4 text-xs">
@@ -211,7 +218,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
         </Card>
       )}
 
-      {!fromBanner && commands.length === 0 ? (
+      {!fromBanner && !inDialog && commands.length === 0 ? (
         <Card className="border-dashed border-2 bg-transparent">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <FileText className="h-12 w-12 text-muted-foreground/30 mb-4" />
@@ -222,7 +229,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
           </CardContent>
         </Card>
       ) : (
-        !fromBanner && (
+        !fromBanner && !inDialog && (
           <div className="space-y-4">
             {commands.map((command) => (
               <Card
@@ -241,7 +248,7 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
                   <div className="flex items-start justify-between">
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2">
-                        {getStatusBadge(command.status)}
+                        {getStatusBadge(command.status, command.sensor_status)}
                         {!command.read_status && (
                           <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                         )}
@@ -278,8 +285,8 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
         )
       )}
 
-      {/* 反馈表单 */}
-      {selectedCommand && selectedCommand.status !== '已完成' && (
+      {/* 反馈表单 - 只要传感器状态不是"正常"就允许继续提交 */}
+      {selectedCommand && selectedCommand.sensor_status !== '正常' && (
         <Card className="border-primary shadow-lg">
           <CardHeader>
             <CardTitle className="text-lg">提交维修反馈</CardTitle>
@@ -377,12 +384,12 @@ export function WorkerNotifications({ currentUser, onStatusChange, onRefreshSens
         </Card>
       )}
 
-      {selectedCommand && selectedCommand.status === '已完成' && (
+      {selectedCommand && selectedCommand.sensor_status === '正常' && (
         <Card className="border-green-200 bg-green-50/50">
           <CardContent className="py-6 text-center">
             <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
             <h3 className="font-medium text-green-800">任务已完成</h3>
-            <p className="text-sm text-green-700 mt-1">您已提交该维修任务的反馈</p>
+            <p className="text-sm text-green-700 mt-1">您已提交该维修任务的反馈，传感器状态已更新为"正常"</p>
           </CardContent>
         </Card>
       )}

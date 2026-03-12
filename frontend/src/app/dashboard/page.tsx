@@ -77,12 +77,12 @@ export default function DashboardPage() {
   const [selectedWorkers, setSelectedWorkers] = useState<number[]>([]);
   const [deadline, setDeadline] = useState('');
   const [workerStatus, setWorkerStatus] = useState<{ status: string } | null>(null);
-  const [fromBannerMode, setFromBannerMode] = useState(false);
   const [sensorDetailsOpen, setSensorDetailsOpen] = useState(false);
   const [selectedSensorId, setSelectedSensorId] = useState<number | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -309,8 +309,7 @@ export default function DashboardPage() {
   const handleResetMaintenance = async () => {
     setIsResetting(true);
     try {
-      // 某些版本的 API 可能不存在 resetMaintenance，使用 any 并可选链以避免类型错误
-      await (API as any).resetMaintenance?.();
+      await API.resetMaintenance();
       toast({ title: "重置成功", description: "所有维修记录已删除，工人状态已恢复" });
       setResetDialogOpen(false);
       // 刷新数据
@@ -424,16 +423,7 @@ export default function DashboardPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('横幅按钮被点击，当前 activeTab:', activeTab);
-                  setActiveTab('tasks');
-                  setFromBannerMode(true);
-                  // 强制滚动到任务区域
-                  setTimeout(() => {
-                    const tasksSection = document.getElementById('tasks-section');
-                    if (tasksSection) {
-                      tasksSection.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }, 100);
+                  setTaskDialogOpen(true);
                 }}
                 variant="secondary"
                 className="bg-white text-orange-600 hover:bg-orange-50 pointer-events-auto relative z-10"
@@ -791,28 +781,16 @@ export default function DashboardPage() {
 
             {currentUser?.role === '工人' && (
               <TabsContent value="tasks" className="mt-6 space-y-4" id="tasks-section">
-                <>
-                  {fromBannerMode && (
-                    <div className="mb-4">
-                      <Button
-                        variant="ghost"
-                        onClick={() => setFromBannerMode(false)}
-                        className="text-sm"
-                      >
-                        ← 返回任务列表
-                      </Button>
-                    </div>
-                  )}
-                  <WorkerNotifications
-                    currentUser={currentUser}
-                    onStatusChange={() => {
-                      // 刷新工人状态
-                      API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
-                    }}
-                    onRefreshSensors={loadSensors}
-                    fromBanner={fromBannerMode}
-                  />
-                </>
+                <WorkerNotifications
+                  currentUser={currentUser}
+                  onStatusChange={() => {
+                    // 刷新工人状态
+                    API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
+                  }}
+                  onRefreshSensors={loadSensors}
+                  fromBanner={false}
+                  inDialog={false}
+                />
               </TabsContent>
             )}
           </Tabs>
@@ -916,11 +894,11 @@ export default function DashboardPage() {
 
       {/* 底部导航栏 (仅手机端) - 类安卓体验 */}
       <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-lg border-t border-border px-6 py-3 flex justify-between items-center shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
-        <button type="button" onClick={() => { setActiveTab('all'); setFromBannerMode(false); }} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'all' ? 'text-primary' : 'text-muted-foreground')}>
+        <button type="button" onClick={() => setActiveTab('all')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'all' ? 'text-primary' : 'text-muted-foreground')}>
           <Home className="h-5 w-5" />
           <span className="text-[10px] font-medium">概览</span>
         </button>
-        <button type="button" onClick={() => { setActiveTab('high'); setFromBannerMode(false); }} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'high' ? 'text-destructive' : 'text-muted-foreground')}>
+        <button type="button" onClick={() => setActiveTab('high')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'high' ? 'text-destructive' : 'text-muted-foreground')}>
           <Bell className="h-5 w-5" />
           <span className="text-[10px] font-medium">预警</span>
         </button>
@@ -962,6 +940,7 @@ export default function DashboardPage() {
                 确定要删除所有维修记录吗？此操作将：
               </p>
               <ul className="text-orange-700 text-sm mt-2 space-y-1 list-disc list-inside">
+                <li>删除所有检修记录（含照片和传感器关联）</li>
                 <li>删除所有派工指令和维修反馈</li>
                 <li>将所有工人状态重置为"空闲"</li>
                 <li>传感器状态保持不变，只清除维修记录</li>
@@ -995,6 +974,28 @@ export default function DashboardPage() {
         onOpenChange={setSensorDetailsOpen}
         sensorId={selectedSensorId}
       />
+
+      {/* 维修任务弹窗 */}
+      <Dialog open={taskDialogOpen} onOpenChange={setTaskDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] z-[10000] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-headline text-xl">维修任务详情</DialogTitle>
+            <DialogDescription>
+              查看并处理当前维修任务
+            </DialogDescription>
+          </DialogHeader>
+          <WorkerNotifications
+            currentUser={currentUser}
+            onStatusChange={() => {
+              // 刷新工人状态
+              API.getWorkerStatus().then(setWorkerStatus).catch(console.error);
+            }}
+            onRefreshSensors={loadSensors}
+            fromBanner={false}
+            inDialog={true}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

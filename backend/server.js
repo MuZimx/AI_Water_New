@@ -960,7 +960,13 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
     const rows = await prisma.command_recipients.findMany({
       where: { user_id: req.user.id },
       include: {
-        commands: true,
+        commands: {
+          include: {
+            sensors: {
+              select: { id: true, status: true }
+            }
+          }
+        },
         users: {
           select: { username: true, full_name: true }
         }
@@ -974,7 +980,9 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
       read_at: item.read_at,
       completed_at: item.completed_at,
       worker_name: item.users.username,
-      worker_full_name: item.users.full_name
+      worker_full_name: item.users.full_name,
+      sensor_id: item.commands.sensors?.id || null,
+      sensor_status: item.commands.sensors?.status || null
     }));
 
     res.json({ success: true, data });
@@ -1054,7 +1062,14 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
   const { feedback, content, update_sensor } = req.body;
   const feedbackText = (feedback || content || '').trim();
 
+  console.log('提交反馈 - Command ID:', id);
+  console.log('提交反馈 - 用户:', req.user);
+  console.log('提交反馈 - 反馈内容:', feedbackText);
+  console.log('提交反馈 - 更新传感器:', update_sensor);
+  console.log('提交反馈 - 上传文件数量:', req.files ? req.files.length : 0);
+
   if (req.user.role !== '工人') {
+    console.error('权限不足: 用户角色不是工人');
     return res.status(403).json({ success: false, message: '权限不足' });
   }
 
@@ -1067,10 +1082,12 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
   try {
     const commandId = parseInt(id, 10);
     let feedbackId = null;
+    let maintenanceRecordId = null;
+
     await prisma.$transaction(async (tx) => {
       const command = await tx.commands.findUnique({
         where: { id: commandId },
-        select: { sensor_id: true }
+        select: { sensor_id: true, title: true, content: true }
       });
       if (!command) {
         throw new Error('NOT_FOUND');
@@ -1083,16 +1100,66 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
         throw new Error('NOT_FOUND');
       }
 
-      await tx.command_recipients.update({
-        where: { id: recipient.id },
+      // 创建检修记录
+      const maintenanceRecord = await tx.maintenance_records.create({
         data: {
-          status: '已完成',
-          completed_at: new Date()
+          user_id: req.user.id,
+          title: command.title || '维修反馈',
+          content: feedbackText || command.content || ''
         }
       });
+      maintenanceRecordId = maintenanceRecord.id;
 
-      await tx.users.update({ where: { id: req.user.id }, data: { worker_status: '空闲' } });
-      await tx.commands.update({ where: { id: commandId }, data: { status: '已完成' } });
+      // 如果命令关联了传感器，则将传感器关联到检修记录
+      if (command.sensor_id) {
+        const sensor = await tx.sensors.findUnique({
+          where: { id: command.sensor_id },
+          select: { id: true, name: true }
+        });
+        if (sensor) {
+          await tx.maintenance_sensors.create({
+            data: {
+              maintenance_id: maintenanceRecordId,
+              sensor_id: sensor.id,
+              sensor_name: sensor.name
+            }
+          });
+        }
+      }
+
+      // 如果有上传的照片，则将照片关联到检修记录
+      if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+        await tx.maintenance_photos.createMany({
+          data: req.files.map(file => ({
+            maintenance_id: maintenanceRecordId,
+            filename: file.filename,
+            original_name: file.originalname
+          }))
+        });
+      }
+
+      // 只在勾选"维修完成"时，才将任务状态更新为"已完成"
+      if (update_sensor === 'true') {
+        await tx.command_recipients.update({
+          where: { id: recipient.id },
+          data: {
+            status: '已完成',
+            completed_at: new Date()
+          }
+        });
+
+        await tx.commands.update({ where: { id: commandId }, data: { status: '已完成' } });
+      } else {
+        // 否则更新为"进行中"状态
+        await tx.command_recipients.update({
+          where: { id: recipient.id },
+          data: {
+            status: '进行中'
+          }
+        });
+
+        await tx.commands.update({ where: { id: commandId }, data: { status: '进行中' } });
+      }
 
       if (feedbackText) {
         const existingFeedback = await tx.command_feedbacks.findFirst({
@@ -1126,15 +1193,18 @@ app.post('/api/commands/:id/feedback', authenticateToken, commandFeedbackPhotosU
 
       if (update_sensor === 'true' && command.sensor_id) {
         await tx.sensors.update({ where: { id: command.sensor_id }, data: { status: '正常' } });
+        await tx.users.update({ where: { id: req.user.id }, data: { worker_status: '空闲' } });
       }
     });
 
-    res.json({ success: true, message: '反馈提交成功', photos: photoUrls, feedbackId });
+    console.log('反馈提交成功, feedbackId:', feedbackId, 'maintenanceRecordId:', maintenanceRecordId);
+    res.json({ success: true, message: '反馈提交成功', photos: photoUrls, feedbackId, id: feedbackId, maintenanceRecordId });
   } catch (error) {
+    console.error('提交反馈失败:', error);
     if (error.message === 'NOT_FOUND') {
-      return res.status(404).json({ success: false, message: '指令不存在' });
+      return res.status(404).json({ success: false, message: '指令不存在或无权访问' });
     }
-    return res.status(500).json({ success: false, message: '提交反馈失败' });
+    return res.status(500).json({ success: false, message: '提交反馈失败，请稍后重试' });
   }
 });
 
@@ -1165,11 +1235,19 @@ app.delete('/api/commands/reset', authenticateToken, async (req, res) => {
 
   try {
     await prisma.$transaction(async (tx) => {
+      // 删除检修记录相关的照片和传感器关联
+      await tx.maintenance_photos.deleteMany({});
+      await tx.maintenance_sensors.deleteMany({});
+      await tx.maintenance_records.deleteMany({});
+
+      // 删除命令相关的数据
       await tx.command_recipients.deleteMany({});
       await tx.command_feedback_photos.deleteMany({});
       await tx.command_feedbacks.deleteMany({});
       await tx.command_attachments.deleteMany({});
       await tx.commands.deleteMany({});
+
+      // 将所有工人状态重置为"空闲"
       await tx.users.updateMany({
         where: { role: '工人' },
         data: { worker_status: '空闲' }

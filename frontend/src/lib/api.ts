@@ -337,6 +337,58 @@ export const API = {
     return response.data;
   },
 
+  // 统一提交反馈接口（支持图片上传）
+  submitFeedback: async (id: number, content: string, photos?: File[], updateSensor?: boolean): Promise<{ id: number; photos: string[] }> => {
+    const formData = new FormData();
+    formData.append('content', content);
+    if (updateSensor) {
+      formData.append('update_sensor', 'true');
+    }
+    if (photos && photos.length > 0) {
+      photos.forEach((photo) => {
+        formData.append('photos', photo);
+      });
+    }
+
+    const token = localStorage.getItem('auth_token');
+    const url = `${API_BASE_URL}/commands/${id}/feedback`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new ApiError(
+          responseData?.message || '提交反馈失败',
+          response.status,
+          responseData
+        );
+      }
+
+      // 返回正确格式的数据
+      if (responseData.success) {
+        return {
+          id: responseData.id || responseData.feedbackId,
+          photos: responseData.photos || []
+        };
+      } else {
+        throw new ApiError(responseData.message || '提交反馈失败', response.status, responseData);
+      }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError('网络错误，请检查连接', 0);
+    }
+  },
+
   uploadCommandFeedbackPhotos: async (id: number, photos: File[]): Promise<Array<{ filename: string; originalName: string }>> => {
     const formData = new FormData();
     photos.forEach((photo) => {
@@ -372,6 +424,13 @@ export const API = {
     await request<{ success: boolean }>('/workers/my-status', {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    });
+  },
+
+  // 重置维修记录（仅管理员）
+  resetMaintenance: async (): Promise<void> => {
+    await request<{ success: boolean }>('/commands/reset', {
+      method: 'DELETE',
     });
   },
 };
