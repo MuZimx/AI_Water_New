@@ -97,27 +97,6 @@ export default function ProfilePage() {
                   </div>
                </CardContent>
             </Card>
-
-            <Card className="bg-white/50 backdrop-blur-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-headline flex items-center gap-2">
-                  <History className="h-4 w-4 text-primary" />
-                  活动历史
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  { action: '会话已启动', time: '2 分钟前' },
-                  { action: '分析已完成', time: '1 小时前' },
-                  { action: '文件已删除', time: '昨天' }
-                ].map((log, i) => (
-                  <div key={i} className="flex justify-between items-center text-xs pb-2 border-b border-muted last:border-0 last:pb-0">
-                    <span className="text-foreground/80 font-medium">{log.action}</span>
-                    <span className="text-muted-foreground">{log.time}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
           </div>
 
           <div className="md:col-span-2">
