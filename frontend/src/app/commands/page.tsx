@@ -92,6 +92,7 @@ export default function CommandsPage() {
     switch (status) {
       case '未执行':
         return <Clock className="h-4 w-4 text-yellow-500" />;
+      case '已执行':
       case '已完成':
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       default:
@@ -103,11 +104,16 @@ export default function CommandsPage() {
     switch (status) {
       case '未执行':
         return 'bg-yellow-100 text-yellow-800';
+      case '已执行':
       case '已完成':
         return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getStatusLabel = (status: string) => {
+    return status === '已执行' ? '已完成' : status;
   };
 
   return (
@@ -191,7 +197,7 @@ export default function CommandsPage() {
                         {command.recipient_status && (
                           <span className={`flex items-center px-2 py-0.5 text-xs rounded-full ${getStatusColor(command.recipient_status)}`}>
                             {getStatusIcon(command.recipient_status)}
-                            <span className="ml-1">{command.recipient_status}</span>
+                            <span className="ml-1">{getStatusLabel(command.recipient_status)}</span>
                           </span>
                         )}
                       </div>
