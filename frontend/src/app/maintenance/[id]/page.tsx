@@ -257,7 +257,9 @@ export default function MaintenanceDetailPage() {
                 {record.photos.map((photo) => (
                   <div key={photo.id} className="relative">
                     <img
-                      src={`${FILE_BASE_URL}/uploads/maintenance/${photo.filename}`}
+                      src={photo.filename.startsWith('feedback-')
+                        ? `${FILE_BASE_URL}/uploads/command_feedback/${photo.filename}`
+                        : `${FILE_BASE_URL}/uploads/maintenance/${photo.filename}`}
                       alt={photo.original_name}
                       className="w-full h-40 object-cover rounded-lg border"
                     />
