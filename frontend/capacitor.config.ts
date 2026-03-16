@@ -10,9 +10,8 @@ const config: CapacitorConfig = {
     // 明确的导航白名单（替换为你的实际后端 API 域名）
     allowNavigation: [
       'localhost:*',
-      // 添加你的后端 API 域名，例如:
-      // 'api.yourdomain.com:*',
-      // '*.yourdomain.com:*'
+      'api-aiwater.cszj.wang:*',
+      '*.cszj.wang:*'
     ],
     // 仅在必要时允许 HTTP（不推荐生产环境使用）
     cleartext: false
