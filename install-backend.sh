@@ -7,7 +7,7 @@ IMAGE=""
 CONTAINER_NAME="ai-water-backend"
 HOST_PORT="3293"
 APP_DIR="${PWD}/ai-water-backend-data"
-DB_DIR="${APP_DIR}/db"
+DATA_DIR="${APP_DIR}/data"
 UPLOADS_DIR="${APP_DIR}/uploads"
 ENV_FILE="${APP_DIR}/backend-secrets.env"
 
@@ -110,7 +110,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 echo "[1/5] 创建持久化目录..."
-mkdir -p "${DB_DIR}" "${UPLOADS_DIR}"
+mkdir -p "${DATA_DIR}" "${UPLOADS_DIR}"
 
 load_or_generate_secrets
 
@@ -139,12 +139,12 @@ docker run -d \
   --restart unless-stopped \
   -p "${HOST_PORT}:3001" \
   -e PORT=3001 \
-  -e DATABASE_URL='file:./db/users.db' \
+  -e DATABASE_URL='file:./data/users.db' \
   -e ACCESS_TOKEN_SECRET="${ACCESS_TOKEN_SECRET}" \
   -e REFRESH_TOKEN_SECRET="${REFRESH_TOKEN_SECRET}" \
   -e ACCESS_TOKEN_EXPIRES_IN="${ACCESS_TOKEN_EXPIRES_IN}" \
   -e REFRESH_TOKEN_EXPIRES_IN="${REFRESH_TOKEN_EXPIRES_IN}" \
-  -v "${DB_DIR}:/app/db" \
+  -v "${DATA_DIR}:/app/data" \
   -v "${UPLOADS_DIR}:/app/uploads" \
   "${IMAGE}"
 
