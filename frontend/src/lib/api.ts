@@ -6,6 +6,9 @@ const API_BASE_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/?$/i.tes
   : rawApiBaseUrl;
 export const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
+// 导入 Capacitor 存储工具
+import { storage } from './storage';
+
 export type RiskLevel = '高风险' | '中风险' | '低风险' | '未检测';
 
 export interface AudioFile {
@@ -83,6 +86,12 @@ async function request<T>(
     ...options.headers,
   };
 
+  // 如果有 token，添加认证头
+  const token = await storage.getItem('auth_token');
+  if (token) {
+    (defaultHeaders as any)['Authorization'] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch(url, {
       ...options,
@@ -139,6 +148,7 @@ export const API = {
     });
 
     if (response.success && response.data) {
+      await storage.setItem('auth_token', response.data.accessToken);
       return {
         user: response.data.user,
         token: ''
@@ -159,17 +169,17 @@ export const API = {
     });
 
     if (response.success && response.data) {
-      return { user: response.data.user, token: '' };
+      // 若后端返回 token，则保存
+      if (response.data.accessToken) {
+        await storage.setItem('auth_token', response.data.accessToken);
+      }
+      return { user: response.data.user, token: response.data.accessToken };
     }
     throw new Error('注册失败');
   },
 
   logout: async (): Promise<void> => {
-    try {
-      await request<{ success: boolean }>('/auth/logout', {
-        method: 'POST',
-      });
-    } catch {}
+    await storage.removeItem('auth_token');
   },
 
   getCurrentUser: async (): Promise<User | null> => {
@@ -230,11 +240,27 @@ export const API = {
       formData.append('sensor_id', sensorId.toString());
     }
 
-    const responseData = await request<any>('/upload-audio', {
-      method: 'POST',
-      body: formData,
-      headers: {},
-    });
+    const token = await storage.getItem('auth_token');
+    const url = `${API_BASE_URL}/upload-audio`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        throw new ApiError(
+          responseData?.message || '上传失败',
+          response.status,
+          responseData
+        );
+      }
 
     return responseData.file || responseData.data || {};
   },
@@ -376,6 +402,9 @@ export const API = {
         formData.append('photos', photo);
       });
     }
+
+    const token = await storage.getItem('auth_token');
+    const url = `${API_BASE_URL}/commands/${id}/feedback`;
 
     try {
       const responseData = await request<any>(`/commands/${id}/feedback`, {
