@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 const { PythonShell } = require('python-shell');
 const chokidar = require('chokidar');
@@ -24,6 +25,138 @@ const SAFE_PUBLIC_UPLOAD_EXTENSIONS = new Set([...SAFE_AUDIO_EXTENSIONS, ...SAFE
 const DANGEROUS_UPLOAD_EXTENSIONS = new Set(['.html', '.htm', '.svg', '.js', '.mjs', '.cjs', '.json', '.xml', '.exe', '.bat', '.cmd', '.sh']);
 const SAFE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const DANGEROUS_ATTACHMENT_MIME_TYPES = new Set(['text/html', 'image/svg+xml', 'application/javascript', 'text/javascript', 'application/x-msdownload']);
+const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
+const LOG_BODY_ENABLED = process.env.LOG_BODY_ENABLED !== 'false';
+const LOG_MAX_FIELD_LENGTH = Number(process.env.LOG_MAX_FIELD_LENGTH || 2000);
+const LOG_MAX_BODY_DEPTH = Number(process.env.LOG_MAX_BODY_DEPTH || 3);
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'oldpassword',
+  'newpassword',
+  'token',
+  'accesstoken',
+  'refreshtoken',
+  'access_token',
+  'refresh_token',
+  'authorization',
+  'cookie',
+  'set-cookie'
+]);
+const LOG_LEVEL_WEIGHT = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40
+};
+
+function shouldLog(level) {
+  const current = LOG_LEVEL_WEIGHT[LOG_LEVEL] || LOG_LEVEL_WEIGHT.info;
+  const target = LOG_LEVEL_WEIGHT[level] || LOG_LEVEL_WEIGHT.info;
+  return target >= current;
+}
+
+function maskSensitiveValue(value) {
+  if (!value) {
+    return '***';
+  }
+
+  if (typeof value !== 'string') {
+    return '***';
+  }
+
+  if (value.length <= 8) {
+    return '***';
+  }
+
+  return `${value.slice(0, 4)}***${value.slice(-2)}`;
+}
+
+function trimLongValue(value, maxLength = LOG_MAX_FIELD_LENGTH) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength)}...(truncated)`;
+}
+
+function sanitizeForLog(value, depth = 0) {
+  if (value == null) {
+    return value;
+  }
+
+  if (depth > LOG_MAX_BODY_DEPTH) {
+    return '[max-depth-reached]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map(item => sanitizeForLog(item, depth + 1));
+  }
+
+  if (typeof value === 'object') {
+    const result = {};
+    Object.entries(value).forEach(([key, item]) => {
+      const normalizedKey = String(key).toLowerCase();
+      if (SENSITIVE_KEYS.has(normalizedKey) || normalizedKey.includes('password') || normalizedKey.includes('token')) {
+        result[key] = maskSensitiveValue(item);
+        return;
+      }
+
+      result[key] = sanitizeForLog(item, depth + 1);
+    });
+    return result;
+  }
+
+  if (typeof value === 'string') {
+    return trimLongValue(value);
+  }
+
+  return value;
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || req.ip;
+}
+
+function createRequestId() {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function writeLog(level, message, meta = {}) {
+  if (!shouldLog(level)) {
+    return;
+  }
+
+  const payload = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    ...meta
+  };
+
+  const line = JSON.stringify(payload);
+  if (level === 'error') {
+    console.error(line);
+    return;
+  }
+
+  if (level === 'warn') {
+    console.warn(line);
+    return;
+  }
+
+  console.log(line);
+}
 
 function parseCookies(req) {
   const cookieHeader = req.headers.cookie;
@@ -328,6 +461,76 @@ const commandFeedbackPhotosUpload = multer({
 app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] || createRequestId();
+  const requestStartAt = process.hrtime.bigint();
+  const safeRequestHeaders = sanitizeForLog({
+    'user-agent': req.headers['user-agent'],
+    'content-type': req.headers['content-type'],
+    authorization: req.headers.authorization,
+    cookie: req.headers.cookie
+  });
+
+  req.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+
+  const originalJson = res.json.bind(res);
+  const originalSend = res.send.bind(res);
+  let responseBody;
+
+  res.json = function patchedJson(body) {
+    responseBody = body;
+    return originalJson(body);
+  };
+
+  res.send = function patchedSend(body) {
+    responseBody = body;
+    return originalSend(body);
+  };
+
+  if (req.path.startsWith('/api')) {
+    writeLog('info', 'api_request_start', {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      ip: getClientIp(req),
+      query: sanitizeForLog(req.query || {}),
+      headers: safeRequestHeaders,
+      body: LOG_BODY_ENABLED ? sanitizeForLog(req.body || {}) : undefined
+    });
+  }
+
+  res.on('finish', () => {
+    if (!req.path.startsWith('/api')) {
+      return;
+    }
+
+    const durationMs = Number(process.hrtime.bigint() - requestStartAt) / 1000000;
+    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+    let normalizedResponseBody = responseBody;
+
+    if (Buffer.isBuffer(responseBody)) {
+      normalizedResponseBody = `[buffer:${responseBody.length}]`;
+    } else if (typeof responseBody === 'string') {
+      normalizedResponseBody = trimLongValue(responseBody);
+    }
+
+    writeLog(level, 'api_request_end', {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Number(durationMs.toFixed(2)),
+      userId: req.user?.id || null,
+      userRole: req.user?.role || null,
+      responseBody: LOG_BODY_ENABLED ? sanitizeForLog(normalizedResponseBody) : undefined
+    });
+  });
+
+  next();
+});
+
 app.use('/uploads', uploadAccessControl, express.static(uploadDir, { dotfiles: 'deny', index: false })); // 提供静态文件访问
 
 // 提供离线瓦片静态目录（如果存在）
@@ -1729,6 +1932,20 @@ app.put('/api/workers/my-status', authenticateToken, async (req, res) => {
 
 // 错误处理中间件
 app.use((error, req, res, next) => {
+  writeLog('error', 'api_error', {
+    requestId: req.requestId || null,
+    method: req.method,
+    path: req.originalUrl,
+    userId: req.user?.id || null,
+    userRole: req.user?.role || null,
+    body: LOG_BODY_ENABLED ? sanitizeForLog(req.body || {}) : undefined,
+    query: sanitizeForLog(req.query || {}),
+    errorName: error?.name,
+    errorCode: error?.code,
+    errorMessage: error?.message,
+    stack: error?.stack
+  });
+
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
@@ -1764,7 +1981,27 @@ app.use((error, req, res, next) => {
 
 // 启动服务器
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`后端服务器正在运行，端口: ${PORT}`);
+  writeLog('info', 'server_started', {
+    port: PORT,
+    nodeEnv: process.env.NODE_ENV || 'development',
+    logLevel: LOG_LEVEL,
+    logBodyEnabled: LOG_BODY_ENABLED
+  });
+});
+
+process.on('unhandledRejection', (reason) => {
+  writeLog('error', 'process_unhandled_rejection', {
+    reason: sanitizeForLog(reason),
+    stack: reason && reason.stack ? reason.stack : undefined
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  writeLog('error', 'process_uncaught_exception', {
+    errorName: error?.name,
+    errorMessage: error?.message,
+    stack: error?.stack
+  });
 });
 
 // 公开注册接口（允许前端注册，支持选择角色）
