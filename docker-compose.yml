@@ -1,0 +1,26 @@
+name: ai-water
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-local}/ai-water-backend:latest
+    container_name: ai-water-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DATABASE_URL: file:./data/users.db
+      ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET:-change_this_access_secret}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-change_this_refresh_secret}
+      ACCESS_TOKEN_EXPIRES_IN: ${ACCESS_TOKEN_EXPIRES_IN:-15m}
+      REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
+    volumes:
+      - ai_water_backend_db:/app/data
+      - ai_water_backend_uploads:/app/uploads
+
+volumes:
+  ai_water_backend_db:
+  ai_water_backend_uploads:

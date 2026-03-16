@@ -51,7 +51,7 @@ import {
   DialogTrigger,
   DialogFooter
 } from '@/components/ui/dialog';
-import { API, type AudioFile, type User as UserType } from '@/lib/api';
+import { API, FILE_BASE_URL, type AudioFile, type User as UserType } from '@/lib/api';
 import { RiskBadge } from '@/components/risk-badge';
 import { AudioPlayer } from '@/components/audio-player';
 import { AIInterpretationTool } from '@/components/ai-interpretation-tool';
@@ -884,7 +884,7 @@ export default function DashboardPage() {
                     {(selectedFile.status === 'completed' || selectedFile.risk_level !== '未检测') && (
                       <div className="space-y-3 pt-2 border-t border-dashed">
                         <AudioPlayer
-                          src={`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api', '') || 'http://localhost:3000'}/uploads/${selectedFile.filename}`}
+                          src={`${FILE_BASE_URL}/uploads/${selectedFile.filename}`}
                           title={selectedFile.original_name}
                         />
                       </div>

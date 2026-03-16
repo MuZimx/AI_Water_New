@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { API } from '@/lib/api';
+import { API, FILE_BASE_URL } from '@/lib/api';
 import { Clock, CheckCircle, AlertCircle, User, Image as ImageIcon, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { storage } from '@/lib/storage';
@@ -163,7 +163,7 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
                               onClick={() => setSelectedImage(photo)}
                             >
                               <img
-                                src={`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}${photo}`}
+                                src={`${FILE_BASE_URL}${photo}`}
                                 alt={`照片${idx + 1}`}
                                 className="w-full h-full object-cover"
                               />
@@ -200,7 +200,7 @@ export function SensorDetailsDialog({ open, onOpenChange, sensorId }: SensorDeta
         >
           <div className="relative max-w-4xl max-h-[90vh]">
             <img
-              src={`${process.env.NEXT_PUBLIC_API_BASE_URL?.replace('/api','') || 'http://localhost:3000'}${selectedImage}`}
+              src={`${FILE_BASE_URL}${selectedImage}`}
               alt="预览"
               className="max-w-full max-h-[90vh] object-contain rounded-lg"
             />

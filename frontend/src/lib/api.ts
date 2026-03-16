@@ -1,6 +1,9 @@
 // 真实后端 API 客户端
 // 配置后端服务器地址
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+const rawApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+const API_BASE_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/?$/i.test(rawApiBaseUrl)
+  ? '/api'
+  : rawApiBaseUrl;
 export const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
 // 导入 Capacitor 存储工具
@@ -50,7 +53,7 @@ export interface RegisterRequest {
   password: string;
   full_name?: string;
   phone?: string;
-  role: '工人' | '管理员';
+  role?: '工人';
 }
 
 export interface UploadResponse {
@@ -93,6 +96,7 @@ async function request<T>(
     const response = await fetch(url, {
       ...options,
       headers: defaultHeaders,
+      credentials: 'include',
     });
 
     // 更稳健地处理返回：优先解析 JSON，否则读取为文本（可能是空或 HTML 错误页）
@@ -138,7 +142,7 @@ export const API = {
 
   // 用户认证
   login: async (credentials: LoginRequest): Promise<{ user: User; token: string }> => {
-    const response = await request<{ success: boolean; data: { accessToken: string; refreshToken: string; user: User } }>('/login', {
+    const response = await request<{ success: boolean; data: { user: User } }>('/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
@@ -147,19 +151,21 @@ export const API = {
       await storage.setItem('auth_token', response.data.accessToken);
       return {
         user: response.data.user,
-        token: response.data.accessToken
+        token: ''
       };
     }
     throw new Error('登录失败');
   },
 
-  // 注册（前端调用：允许选择角色 工人/管理员）
+  // 注册（公开注册仅允许创建工人账号）
   register: async (payload: RegisterRequest): Promise<{ user: User; token?: string }> => {
-    // 假设后端开放 /register 或 /users/register 路径处理公开注册
     const endpoint = '/register';
-    const response = await request<{ success: boolean; data: { user: User; accessToken?: string } }>(endpoint, {
+    const response = await request<{ success: boolean; data: { user: User } }>(endpoint, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        ...payload,
+        role: '工人',
+      }),
     });
 
     if (response.success && response.data) {
@@ -256,14 +262,7 @@ export const API = {
         );
       }
 
-      // 返回上传后的文件信息（需要根据实际返回格式调整）
-      return responseData.file || responseData.data || {};
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      throw new ApiError('网络错误，请检查连接', 0);
-    }
+    return responseData.file || responseData.data || {};
   },
 
   deleteFile: async (id: number): Promise<void> => {
@@ -408,33 +407,20 @@ export const API = {
     const url = `${API_BASE_URL}/commands/${id}/feedback`;
 
     try {
-      const response = await fetch(url, {
+      const responseData = await request<any>(`/commands/${id}/feedback`, {
         method: 'POST',
-        headers: {
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-        },
         body: formData,
+        headers: {},
       });
 
-      const responseData = await response.json();
-
-      if (!response.ok) {
-        throw new ApiError(
-          responseData?.message || '提交反馈失败',
-          response.status,
-          responseData
-        );
-      }
-
-      // 返回正确格式的数据
       if (responseData.success) {
         return {
           id: responseData.id || responseData.feedbackId,
           photos: responseData.photos || []
         };
-      } else {
-        throw new ApiError(responseData.message || '提交反馈失败', response.status, responseData);
       }
+
+      throw new ApiError(responseData.message || '提交反馈失败', 500, responseData);
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;

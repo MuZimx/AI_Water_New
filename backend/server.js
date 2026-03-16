@@ -4,6 +4,7 @@ const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 const { PythonShell } = require('python-shell');
 const chokidar = require('chokidar');
@@ -16,10 +17,260 @@ const {
   JWT_CONFIG
 } = require('./utils/jwt');
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const SAFE_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']);
+const SAFE_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const SAFE_ATTACHMENT_EXTENSIONS = new Set(['.pdf', '.txt', '.csv', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.7z', '.rar', '.jpg', '.jpeg', '.png', '.webp']);
+const SAFE_PUBLIC_UPLOAD_EXTENSIONS = new Set([...SAFE_AUDIO_EXTENSIONS, ...SAFE_IMAGE_EXTENSIONS, ...SAFE_ATTACHMENT_EXTENSIONS]);
+const DANGEROUS_UPLOAD_EXTENSIONS = new Set(['.html', '.htm', '.svg', '.js', '.mjs', '.cjs', '.json', '.xml', '.exe', '.bat', '.cmd', '.sh']);
+const SAFE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const DANGEROUS_ATTACHMENT_MIME_TYPES = new Set(['text/html', 'image/svg+xml', 'application/javascript', 'text/javascript', 'application/x-msdownload']);
+const LOG_LEVEL = (process.env.LOG_LEVEL || 'info').toLowerCase();
+const LOG_BODY_ENABLED = process.env.LOG_BODY_ENABLED !== 'false';
+const LOG_MAX_FIELD_LENGTH = Number(process.env.LOG_MAX_FIELD_LENGTH || 2000);
+const LOG_MAX_BODY_DEPTH = Number(process.env.LOG_MAX_BODY_DEPTH || 3);
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'oldpassword',
+  'newpassword',
+  'token',
+  'accesstoken',
+  'refreshtoken',
+  'access_token',
+  'refresh_token',
+  'authorization',
+  'cookie',
+  'set-cookie'
+]);
+const LOG_LEVEL_WEIGHT = {
+  debug: 10,
+  info: 20,
+  warn: 30,
+  error: 40
+};
+
+function shouldLog(level) {
+  const current = LOG_LEVEL_WEIGHT[LOG_LEVEL] || LOG_LEVEL_WEIGHT.info;
+  const target = LOG_LEVEL_WEIGHT[level] || LOG_LEVEL_WEIGHT.info;
+  return target >= current;
+}
+
+function maskSensitiveValue(value) {
+  if (!value) {
+    return '***';
+  }
+
+  if (typeof value !== 'string') {
+    return '***';
+  }
+
+  if (value.length <= 8) {
+    return '***';
+  }
+
+  return `${value.slice(0, 4)}***${value.slice(-2)}`;
+}
+
+function trimLongValue(value, maxLength = LOG_MAX_FIELD_LENGTH) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength)}...(truncated)`;
+}
+
+function sanitizeForLog(value, depth = 0) {
+  if (value == null) {
+    return value;
+  }
+
+  if (depth > LOG_MAX_BODY_DEPTH) {
+    return '[max-depth-reached]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.slice(0, 50).map(item => sanitizeForLog(item, depth + 1));
+  }
+
+  if (typeof value === 'object') {
+    const result = {};
+    Object.entries(value).forEach(([key, item]) => {
+      const normalizedKey = String(key).toLowerCase();
+      if (SENSITIVE_KEYS.has(normalizedKey) || normalizedKey.includes('password') || normalizedKey.includes('token')) {
+        result[key] = maskSensitiveValue(item);
+        return;
+      }
+
+      result[key] = sanitizeForLog(item, depth + 1);
+    });
+    return result;
+  }
+
+  if (typeof value === 'string') {
+    return trimLongValue(value);
+  }
+
+  return value;
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || req.ip;
+}
+
+function createRequestId() {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function writeLog(level, message, meta = {}) {
+  if (!shouldLog(level)) {
+    return;
+  }
+
+  const payload = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    ...meta
+  };
+
+  const line = JSON.stringify(payload);
+  if (level === 'error') {
+    console.error(line);
+    return;
+  }
+
+  if (level === 'warn') {
+    console.warn(line);
+    return;
+  }
+
+  console.log(line);
+}
+
+function parseCookies(req) {
+  const cookieHeader = req.headers.cookie;
+  if (!cookieHeader) {
+    return {};
+  }
+
+  return cookieHeader.split(';').reduce((acc, item) => {
+    const separatorIndex = item.indexOf('=');
+    if (separatorIndex === -1) {
+      return acc;
+    }
+
+    const key = item.slice(0, separatorIndex).trim();
+    const value = item.slice(separatorIndex + 1).trim();
+    acc[key] = decodeURIComponent(value);
+    return acc;
+  }, {});
+}
+
+function getTokenFromRequest(req) {
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.split(' ')[1];
+  }
+
+  const cookies = parseCookies(req);
+  return cookies.access_token || null;
+}
+
+function parseDurationToMs(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value * 1000;
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const match = value.trim().match(/^(\d+)([smhd])$/i);
+  if (!match) {
+    return undefined;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const multipliers = { s: 1000, m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
+  return amount * multipliers[unit];
+}
+
+function getCookieOptions(maxAge) {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: IS_PRODUCTION,
+    path: '/',
+    ...(maxAge ? { maxAge } : {})
+  };
+}
+
+function setAuthCookies(res, accessToken, refreshToken) {
+  res.cookie('access_token', accessToken, getCookieOptions(parseDurationToMs(JWT_CONFIG.ACCESS_TOKEN_EXPIRES_IN)));
+  res.cookie('refresh_token', refreshToken, getCookieOptions(parseDurationToMs(JWT_CONFIG.REFRESH_TOKEN_EXPIRES_IN)));
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie('access_token', getCookieOptions());
+  res.clearCookie('refresh_token', getCookieOptions());
+}
+
+function getFileExtension(filename = '') {
+  return path.extname(filename).toLowerCase();
+}
+
+function isSafeAudioFile(file) {
+  const extension = getFileExtension(file.originalname);
+  return SAFE_AUDIO_EXTENSIONS.has(extension) && typeof file.mimetype === 'string' && file.mimetype.startsWith('audio/');
+}
+
+function isSafeImageFile(file) {
+  const extension = getFileExtension(file.originalname);
+  return SAFE_IMAGE_EXTENSIONS.has(extension) && SAFE_IMAGE_MIME_TYPES.has(file.mimetype);
+}
+
+function isSafeAttachmentFile(file) {
+  const extension = getFileExtension(file.originalname);
+  if (!SAFE_ATTACHMENT_EXTENSIONS.has(extension) || DANGEROUS_UPLOAD_EXTENSIONS.has(extension)) {
+    return false;
+  }
+
+  if (!file.mimetype) {
+    return true;
+  }
+
+  return !DANGEROUS_ATTACHMENT_MIME_TYPES.has(file.mimetype);
+}
+
+function uploadAccessControl(req, res, next) {
+  const extension = getFileExtension(req.path);
+  if (!SAFE_PUBLIC_UPLOAD_EXTENSIONS.has(extension) || DANGEROUS_UPLOAD_EXTENSIONS.has(extension)) {
+    return res.status(404).json({ success: false, message: '文件不存在' });
+  }
+
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  if (req.path.startsWith('/commands/')) {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
+
+  next();
+}
+
 // JWT认证中间件
 const authenticateToken = async (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  const token = getTokenFromRequest(req);
 
   if (!token) {
     return res.status(401).json({
@@ -113,8 +364,7 @@ const storage = multer.diskStorage({
 
 // 文件过滤器，只允许音频文件
 const fileFilter = (req, file, cb) => {
-  // 检查文件类型是否为音频
-  if (file.mimetype.startsWith('audio/')) {
+  if (isSafeAudioFile(file)) {
     cb(null, true);
   } else {
     cb(new Error('只允许上传音频文件！'), false);
@@ -142,6 +392,14 @@ const maintenancePhotosStorage = multer.diskStorage({
 
 const maintenancePhotosUpload = multer({
   storage: maintenancePhotosStorage,
+  fileFilter: (req, file, cb) => {
+    if (isSafeImageFile(file)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error('只允许上传 JPG、PNG、WEBP 图片！'), false);
+  },
   limits: {
     fileSize: 20 * 1024 * 1024 // 限制文件大小为20MB
   }
@@ -160,6 +418,14 @@ const commandAttachmentsStorage = multer.diskStorage({
 
 const commandAttachmentsUpload = multer({
   storage: commandAttachmentsStorage,
+  fileFilter: (req, file, cb) => {
+    if (isSafeAttachmentFile(file)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error('附件类型不被允许，请上传安全的文档或图片文件'), false);
+  },
   limits: {
     fileSize: 30 * 1024 * 1024 // 限制文件大小为30MB
   }
@@ -178,16 +444,94 @@ const commandFeedbackPhotosStorage = multer.diskStorage({
 
 const commandFeedbackPhotosUpload = multer({
   storage: commandFeedbackPhotosStorage,
+  fileFilter: (req, file, cb) => {
+    if (isSafeImageFile(file)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new Error('只允许上传 JPG、PNG、WEBP 图片！'), false);
+  },
   limits: {
     fileSize: 20 * 1024 * 1024 // 限制文件大小为20MB
   }
 });
 
 // 中间件
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use('/uploads', express.static('uploads')); // 提供静态文件访问
+
+app.use((req, res, next) => {
+  const requestId = req.headers['x-request-id'] || createRequestId();
+  const requestStartAt = process.hrtime.bigint();
+  const safeRequestHeaders = sanitizeForLog({
+    'user-agent': req.headers['user-agent'],
+    'content-type': req.headers['content-type'],
+    authorization: req.headers.authorization,
+    cookie: req.headers.cookie
+  });
+
+  req.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+
+  const originalJson = res.json.bind(res);
+  const originalSend = res.send.bind(res);
+  let responseBody;
+
+  res.json = function patchedJson(body) {
+    responseBody = body;
+    return originalJson(body);
+  };
+
+  res.send = function patchedSend(body) {
+    responseBody = body;
+    return originalSend(body);
+  };
+
+  if (req.path.startsWith('/api')) {
+    writeLog('info', 'api_request_start', {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      ip: getClientIp(req),
+      query: sanitizeForLog(req.query || {}),
+      headers: safeRequestHeaders,
+      body: LOG_BODY_ENABLED ? sanitizeForLog(req.body || {}) : undefined
+    });
+  }
+
+  res.on('finish', () => {
+    if (!req.path.startsWith('/api')) {
+      return;
+    }
+
+    const durationMs = Number(process.hrtime.bigint() - requestStartAt) / 1000000;
+    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
+    let normalizedResponseBody = responseBody;
+
+    if (Buffer.isBuffer(responseBody)) {
+      normalizedResponseBody = `[buffer:${responseBody.length}]`;
+    } else if (typeof responseBody === 'string') {
+      normalizedResponseBody = trimLongValue(responseBody);
+    }
+
+    writeLog(level, 'api_request_end', {
+      requestId,
+      method: req.method,
+      path: req.originalUrl,
+      statusCode: res.statusCode,
+      durationMs: Number(durationMs.toFixed(2)),
+      userId: req.user?.id || null,
+      userRole: req.user?.role || null,
+      responseBody: LOG_BODY_ENABLED ? sanitizeForLog(normalizedResponseBody) : undefined
+    });
+  });
+
+  next();
+});
+
+app.use('/uploads', uploadAccessControl, express.static(uploadDir, { dotfiles: 'deny', index: false })); // 提供静态文件访问
 
 // 提供离线瓦片静态目录（如果存在）
 const tilesDir = path.join(__dirname, 'public', 'tiles');
@@ -350,18 +694,23 @@ app.post('/api/login', async (req, res) => {
 
     const refreshToken = generateRefreshToken({
       id: user.id,
-      username: user.username
+      username: user.username,
+      role: user.role || '工人'
     });
+
+    setAuthCookies(res, accessToken, refreshToken);
 
     res.json({
       success: true,
       message: '登录成功',
       data: {
-        accessToken,
-        refreshToken,
         user: {
           id: user.id,
-          username: user.username
+          username: user.username,
+          role: user.role,
+          full_name: user.full_name,
+          phone: user.phone,
+          worker_status: user.worker_status
         }
       }
     });
@@ -494,10 +843,12 @@ app.get('/api/audio-files', authenticateToken, async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const size = parseInt(req.query.size) || 10;
   const offset = (page - 1) * size;
+  const where = req.user.role === '管理员' ? {} : { user_id: req.user.id };
 
   try {
     const [rows, total] = await Promise.all([
       prisma.audio_files.findMany({
+        where,
         orderBy: { id: 'desc' },
         skip: offset,
         take: size,
@@ -510,7 +861,7 @@ app.get('/api/audio-files', authenticateToken, async (req, res) => {
           }
         }
       }),
-      prisma.audio_files.count()
+      prisma.audio_files.count({ where })
     ]);
 
     // 将 sensors 转换为 sensor 以匹配前端接口
@@ -536,17 +887,32 @@ app.get('/api/audio-files', authenticateToken, async (req, res) => {
 // 删除音频文件接口 - 需要认证
 app.delete('/api/audio-files/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const audioId = parseInt(id, 10);
 
   try {
-    await prisma.audio_files.delete({ where: { id: parseInt(id, 10) } });
+    const record = await prisma.audio_files.findUnique({
+      where: { id: audioId },
+      select: { id: true, user_id: true, filename: true }
+    });
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: '文件不存在' });
+    }
+
+    if (req.user.role !== '管理员' && record.user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: '无权限删除此文件' });
+    }
+
+    await prisma.audio_files.delete({ where: { id: audioId } });
+    try {
+      fs.unlinkSync(path.join(uploadDir, record.filename));
+    } catch (e) {}
+
     res.json({
       success: true,
       message: '删除成功'
     });
   } catch (error) {
-    if (error && error.code === 'P2025') {
-      return res.status(404).json({ success: false, message: '文件不存在' });
-    }
     return res.status(500).json({
       success: false,
       message: '服务器内部错误'
@@ -622,8 +988,9 @@ app.get('/api/audio-processing-status/:name', authenticateToken, (req, res) => {
 });
 
 // 刷新访问令牌接口
-app.post('/api/auth/refresh', (req, res) => {
-  const { refreshToken } = req.body;
+app.post('/api/auth/refresh', async (req, res) => {
+  const cookies = parseCookies(req);
+  const refreshToken = cookies.refresh_token || req.body.refreshToken;
 
   if (!refreshToken) {
     return res.status(401).json({
@@ -634,25 +1001,64 @@ app.post('/api/auth/refresh', (req, res) => {
 
   const decoded = verifyRefreshToken(refreshToken);
   if (!decoded) {
+    clearAuthCookies(res);
     return res.status(403).json({
       success: false,
       message: '刷新令牌无效或已过期'
     });
   }
 
-  // 生成新的访问令牌
-  const newAccessToken = generateAccessToken({
-    id: decoded.id,
-    username: decoded.username
-  });
+  try {
+    const user = await prisma.users.findUnique({
+      where: { id: decoded.id },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        full_name: true,
+        phone: true,
+        worker_status: true
+      }
+    });
 
-  res.json({
-    success: true,
-    message: '令牌刷新成功',
-    data: {
-      accessToken: newAccessToken
+    if (!user) {
+      clearAuthCookies(res);
+      return res.status(401).json({ success: false, message: '用户不存在或已失效' });
     }
-  });
+
+    if (user.role === '工人' && user.worker_status === '禁用') {
+      clearAuthCookies(res);
+      return res.status(403).json({ success: false, message: '账号已被禁用，请联系管理员' });
+    }
+
+    const newAccessToken = generateAccessToken({
+      id: user.id,
+      username: user.username,
+      role: user.role || '工人'
+    });
+    const newRefreshToken = generateRefreshToken({
+      id: user.id,
+      username: user.username,
+      role: user.role || '工人'
+    });
+
+    setAuthCookies(res, newAccessToken, newRefreshToken);
+
+    res.json({
+      success: true,
+      message: '令牌刷新成功',
+      data: {
+        user
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: '服务器内部错误' });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearAuthCookies(res);
+  res.json({ success: true, message: '退出成功' });
 });
 
 // 使用Python模型处理单个音频文件
@@ -848,7 +1254,7 @@ app.get('/api/test', authenticateToken, (req, res) => {
 
 // 简单的传感器列表接口（供前端地图使用）
 // 获取单个传感器详情
-app.get('/api/sensors/:id', async (req, res) => {
+app.get('/api/sensors/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -872,7 +1278,7 @@ app.get('/api/sensors/:id', async (req, res) => {
   }
 });
 
-app.get('/api/sensors', async (req, res) => {
+app.get('/api/sensors', authenticateToken, async (req, res) => {
   try {
     const sensors = await prisma.sensors.findMany({
       select: {
@@ -1162,10 +1568,18 @@ app.get('/api/commands/received', authenticateToken, async (req, res) => {
 // 获取指令的反馈详情（所有用户可见）
 app.get('/api/commands/:id/details', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const commandId = parseInt(id, 10);
+
+  if (!Number.isInteger(commandId) || commandId <= 0) {
+    return res.status(400).json({ success: false, message: '无效的命令ID' });
+  }
 
   try {
     const rows = await prisma.command_recipients.findMany({
-      where: { command_id: parseInt(id, 10) },
+      where: {
+        command_id: commandId,
+        ...(req.user.role === '管理员' ? {} : { user_id: req.user.id })
+      },
       include: {
         commands: true,
         users: {
@@ -1173,6 +1587,10 @@ app.get('/api/commands/:id/details', authenticateToken, async (req, res) => {
         }
       }
     });
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, message: '命令不存在或无权限' });
+    }
 
     const data = rows.map(item => ({
       ...item.commands,
@@ -1192,12 +1610,23 @@ app.get('/api/commands/:id/details', authenticateToken, async (req, res) => {
 // 按传感器ID或状态查询指令（所有用户可见）
 app.get('/api/commands', authenticateToken, async (req, res) => {
   const { sensor_id, status, search } = req.query;
+  const parsedSensorId = sensor_id ? parseInt(sensor_id, 10) : null;
 
   try {
-    const where = {};
+    const where = {
+      ...(req.user.role === '管理员' ? {} : { user_id: req.user.id })
+    };
 
     if (status && status !== 'all') {
       where.status = status;
+    }
+
+    if (parsedSensorId && Number.isInteger(parsedSensorId)) {
+      where.commands = {
+        is: {
+          sensor_id: parsedSensorId
+        }
+      };
     }
 
     const rows = await prisma.command_recipients.findMany({
@@ -1271,7 +1700,7 @@ app.post('/api/commands/:id/feedback', authenticateToken, maintenancePhotosUploa
   // 处理上传的图片
   let photoUrls = [];
   if (req.files && Array.isArray(req.files)) {
-    photoUrls = req.files.map(file => `/uploads/${file.filename}`);
+    photoUrls = req.files.map(file => `/uploads/maintenance/${file.filename}`);
   }
 
   try {
@@ -1503,6 +1932,20 @@ app.put('/api/workers/my-status', authenticateToken, async (req, res) => {
 
 // 错误处理中间件
 app.use((error, req, res, next) => {
+  writeLog('error', 'api_error', {
+    requestId: req.requestId || null,
+    method: req.method,
+    path: req.originalUrl,
+    userId: req.user?.id || null,
+    userRole: req.user?.role || null,
+    body: LOG_BODY_ENABLED ? sanitizeForLog(req.body || {}) : undefined,
+    query: sanitizeForLog(req.query || {}),
+    errorName: error?.name,
+    errorCode: error?.code,
+    errorMessage: error?.message,
+    stack: error?.stack
+  });
+
   if (error instanceof multer.MulterError) {
     if (error.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
@@ -1519,6 +1962,16 @@ app.use((error, req, res, next) => {
     });
   }
 
+  if (
+    error.message === '只允许上传 JPG、PNG、WEBP 图片！' ||
+    error.message === '附件类型不被允许，请上传安全的文档或图片文件'
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+
   res.status(500).json({
     success: false,
     code: error.code || 0,
@@ -1528,20 +1981,43 @@ app.use((error, req, res, next) => {
 
 // 启动服务器
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`后端服务器正在运行，端口: ${PORT}`);
+  writeLog('info', 'server_started', {
+    port: PORT,
+    nodeEnv: process.env.NODE_ENV || 'development',
+    logLevel: LOG_LEVEL,
+    logBodyEnabled: LOG_BODY_ENABLED
+  });
+});
+
+process.on('unhandledRejection', (reason) => {
+  writeLog('error', 'process_unhandled_rejection', {
+    reason: sanitizeForLog(reason),
+    stack: reason && reason.stack ? reason.stack : undefined
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  writeLog('error', 'process_uncaught_exception', {
+    errorName: error?.name,
+    errorMessage: error?.message,
+    stack: error?.stack
+  });
 });
 
 // 公开注册接口（允许前端注册，支持选择角色）
 app.post('/api/register', async (req, res) => {
-  // 公开注册允许选择角色（'工人' 或 '管理员'）——注意：如要在生产中限制管理员创建，请调整策略
   const { username, password, full_name, phone, role } = req.body;
 
-  if (!username || !password || !role) {
-    return res.status(400).json({ success: false, message: '用户名、密码和角色为必填项' });
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: '用户名和密码为必填项' });
   }
 
-  if (!['工人', '管理员'].includes(role)) {
-    return res.status(400).json({ success: false, message: "非法角色，必须为 '工人' 或 '管理员'" });
+  if (role && role !== '工人') {
+    return res.status(403).json({ success: false, message: '公开注册仅允许创建工人账号' });
+  }
+
+  if (password.length < 6 || password.length > 20) {
+    return res.status(400).json({ success: false, message: '密码长度应在6到20个字符之间' });
   }
 
   try {
@@ -1550,22 +2026,21 @@ app.post('/api/register', async (req, res) => {
       data: {
         username,
         password: hashed,
-        role,
+        role: '工人',
         full_name: full_name || null,
         phone: phone || null
       }
     });
 
-    const accessToken = generateAccessToken({ id: user.id, username, role });
-    const refreshToken = generateRefreshToken({ id: user.id, username, role });
+    const accessToken = generateAccessToken({ id: user.id, username, role: '工人' });
+    const refreshToken = generateRefreshToken({ id: user.id, username, role: '工人' });
+    setAuthCookies(res, accessToken, refreshToken);
 
     return res.status(201).json({
       success: true,
       message: '注册成功',
       data: {
-        user: { id: user.id, username, role, full_name: full_name || null, phone: phone || null },
-        accessToken,
-        refreshToken
+        user: { id: user.id, username, role: '工人', full_name: full_name || null, phone: phone || null, worker_status: user.worker_status }
       }
     });
   } catch (e) {
