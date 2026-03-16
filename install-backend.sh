@@ -9,11 +9,51 @@ HOST_PORT="3293"
 APP_DIR="${PWD}/ai-water-backend-data"
 DB_DIR="${APP_DIR}/db"
 UPLOADS_DIR="${APP_DIR}/uploads"
+ENV_FILE="${APP_DIR}/backend-secrets.env"
 
-ACCESS_TOKEN_SECRET="${ACCESS_TOKEN_SECRET:-change_this_access_secret}"
-REFRESH_TOKEN_SECRET="${REFRESH_TOKEN_SECRET:-change_this_refresh_secret}"
+ACCESS_TOKEN_SECRET="${ACCESS_TOKEN_SECRET:-}"
+REFRESH_TOKEN_SECRET="${REFRESH_TOKEN_SECRET:-}"
 ACCESS_TOKEN_EXPIRES_IN="${ACCESS_TOKEN_EXPIRES_IN:-15m}"
 REFRESH_TOKEN_EXPIRES_IN="${REFRESH_TOKEN_EXPIRES_IN:-7d}"
+
+generate_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 48
+    return 0
+  fi
+
+  tr -dc 'A-Za-z0-9' </dev/urandom | head -c 96
+}
+
+load_or_generate_secrets() {
+  local changed=0
+
+  if [[ -f "${ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${ENV_FILE}"
+  fi
+
+  if [[ -z "${ACCESS_TOKEN_SECRET:-}" ]]; then
+    ACCESS_TOKEN_SECRET="$(generate_secret)"
+    changed=1
+  fi
+
+  if [[ -z "${REFRESH_TOKEN_SECRET:-}" ]]; then
+    REFRESH_TOKEN_SECRET="$(generate_secret)"
+    changed=1
+  fi
+
+  if [[ "${changed}" -eq 1 || ! -f "${ENV_FILE}" ]]; then
+    cat >"${ENV_FILE}" <<EOF
+ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET}
+REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
+EOF
+    chmod 600 "${ENV_FILE}" || true
+    echo "[INFO] 已生成并保存随机密钥: ${ENV_FILE}"
+  else
+    echo "[INFO] 复用已存在密钥: ${ENV_FILE}"
+  fi
+}
 
 resolve_latest_tag() {
   if docker manifest inspect "${IMAGE_REPO}:latest" >/dev/null 2>&1; then
@@ -71,6 +111,8 @@ fi
 
 echo "[1/5] 创建持久化目录..."
 mkdir -p "${DB_DIR}" "${UPLOADS_DIR}"
+
+load_or_generate_secrets
 
 IMAGE_TAG="$(resolve_latest_tag)"
 if [[ -z "${IMAGE_TAG}" ]]; then
