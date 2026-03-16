@@ -17,7 +17,6 @@ const {
   JWT_CONFIG
 } = require('./utils/jwt');
 
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const SAFE_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac']);
 const SAFE_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const SAFE_ATTACHMENT_EXTENSIONS = new Set(['.pdf', '.txt', '.csv', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.7z', '.rar', '.jpg', '.jpeg', '.png', '.webp']);
@@ -38,9 +37,7 @@ const SENSITIVE_KEYS = new Set([
   'refreshtoken',
   'access_token',
   'refresh_token',
-  'authorization',
-  'cookie',
-  'set-cookie'
+  'authorization'
 ]);
 const LOG_LEVEL_WEIGHT = {
   debug: 10,
@@ -158,73 +155,13 @@ function writeLog(level, message, meta = {}) {
   console.log(line);
 }
 
-function parseCookies(req) {
-  const cookieHeader = req.headers.cookie;
-  if (!cookieHeader) {
-    return {};
-  }
-
-  return cookieHeader.split(';').reduce((acc, item) => {
-    const separatorIndex = item.indexOf('=');
-    if (separatorIndex === -1) {
-      return acc;
-    }
-
-    const key = item.slice(0, separatorIndex).trim();
-    const value = item.slice(separatorIndex + 1).trim();
-    acc[key] = decodeURIComponent(value);
-    return acc;
-  }, {});
-}
-
 function getTokenFromRequest(req) {
   const authHeader = req.headers['authorization'];
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.split(' ')[1];
   }
 
-  const cookies = parseCookies(req);
-  return cookies.access_token || null;
-}
-
-function parseDurationToMs(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value * 1000;
-  }
-
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  const match = value.trim().match(/^(\d+)([smhd])$/i);
-  if (!match) {
-    return undefined;
-  }
-
-  const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
-  const multipliers = { s: 1000, m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
-  return amount * multipliers[unit];
-}
-
-function getCookieOptions(maxAge) {
-  return {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: IS_PRODUCTION,
-    path: '/',
-    ...(maxAge ? { maxAge } : {})
-  };
-}
-
-function setAuthCookies(res, accessToken, refreshToken) {
-  res.cookie('access_token', accessToken, getCookieOptions(parseDurationToMs(JWT_CONFIG.ACCESS_TOKEN_EXPIRES_IN)));
-  res.cookie('refresh_token', refreshToken, getCookieOptions(parseDurationToMs(JWT_CONFIG.REFRESH_TOKEN_EXPIRES_IN)));
-}
-
-function clearAuthCookies(res) {
-  res.clearCookie('access_token', getCookieOptions());
-  res.clearCookie('refresh_token', getCookieOptions());
+  return null;
 }
 
 function getFileExtension(filename = '') {
@@ -458,7 +395,7 @@ const commandFeedbackPhotosUpload = multer({
 });
 
 // 中间件
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({ origin: true, credentials: false }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -468,8 +405,7 @@ app.use((req, res, next) => {
   const safeRequestHeaders = sanitizeForLog({
     'user-agent': req.headers['user-agent'],
     'content-type': req.headers['content-type'],
-    authorization: req.headers.authorization,
-    cookie: req.headers.cookie
+    authorization: req.headers.authorization
   });
 
   req.requestId = requestId;
@@ -698,12 +634,12 @@ app.post('/api/login', async (req, res) => {
       role: user.role || '工人'
     });
 
-    setAuthCookies(res, accessToken, refreshToken);
-
     res.json({
       success: true,
       message: '登录成功',
       data: {
+        accessToken,
+        refreshToken,
         user: {
           id: user.id,
           username: user.username,
@@ -989,8 +925,7 @@ app.get('/api/audio-processing-status/:name', authenticateToken, (req, res) => {
 
 // 刷新访问令牌接口
 app.post('/api/auth/refresh', async (req, res) => {
-  const cookies = parseCookies(req);
-  const refreshToken = cookies.refresh_token || req.body.refreshToken;
+  const refreshToken = req.body.refreshToken;
 
   if (!refreshToken) {
     return res.status(401).json({
@@ -1001,7 +936,6 @@ app.post('/api/auth/refresh', async (req, res) => {
 
   const decoded = verifyRefreshToken(refreshToken);
   if (!decoded) {
-    clearAuthCookies(res);
     return res.status(403).json({
       success: false,
       message: '刷新令牌无效或已过期'
@@ -1022,12 +956,10 @@ app.post('/api/auth/refresh', async (req, res) => {
     });
 
     if (!user) {
-      clearAuthCookies(res);
       return res.status(401).json({ success: false, message: '用户不存在或已失效' });
     }
 
     if (user.role === '工人' && user.worker_status === '禁用') {
-      clearAuthCookies(res);
       return res.status(403).json({ success: false, message: '账号已被禁用，请联系管理员' });
     }
 
@@ -1042,12 +974,12 @@ app.post('/api/auth/refresh', async (req, res) => {
       role: user.role || '工人'
     });
 
-    setAuthCookies(res, newAccessToken, newRefreshToken);
-
     res.json({
       success: true,
       message: '令牌刷新成功',
       data: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
         user
       }
     });
@@ -1057,7 +989,6 @@ app.post('/api/auth/refresh', async (req, res) => {
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  clearAuthCookies(res);
   res.json({ success: true, message: '退出成功' });
 });
 
@@ -2034,12 +1965,12 @@ app.post('/api/register', async (req, res) => {
 
     const accessToken = generateAccessToken({ id: user.id, username, role: '工人' });
     const refreshToken = generateRefreshToken({ id: user.id, username, role: '工人' });
-    setAuthCookies(res, accessToken, refreshToken);
-
     return res.status(201).json({
       success: true,
       message: '注册成功',
       data: {
+        accessToken,
+        refreshToken,
         user: { id: user.id, username, role: '工人', full_name: full_name || null, phone: phone || null, worker_status: user.worker_status }
       }
     });

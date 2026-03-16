@@ -96,7 +96,6 @@ async function request<T>(
     const response = await fetch(url, {
       ...options,
       headers: defaultHeaders,
-      credentials: 'include',
     });
 
     // 更稳健地处理返回：优先解析 JSON，否则读取为文本（可能是空或 HTML 错误页）
@@ -142,25 +141,27 @@ export const API = {
 
   // 用户认证
   login: async (credentials: LoginRequest): Promise<{ user: User; token: string }> => {
-    const response = await request<{ success: boolean; data: { user: User } }>('/login', {
+    const response = await request<{ success: boolean; data: { user: User; accessToken: string } }>('/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
 
-    if (response.success && response.data) {
+    if (response.success && response.data?.accessToken) {
       await storage.setItem('auth_token', response.data.accessToken);
       return {
         user: response.data.user,
-        token: ''
+        token: response.data.accessToken
       };
     }
+
+    await storage.removeItem('auth_token');
     throw new Error('登录失败');
   },
 
   // 注册（公开注册仅允许创建工人账号）
   register: async (payload: RegisterRequest): Promise<{ user: User; token?: string }> => {
     const endpoint = '/register';
-    const response = await request<{ success: boolean; data: { user: User } }>(endpoint, {
+    const response = await request<{ success: boolean; data: { user: User; accessToken?: string } }>(endpoint, {
       method: 'POST',
       body: JSON.stringify({
         ...payload,
@@ -262,7 +263,14 @@ export const API = {
         );
       }
 
-    return responseData.file || responseData.data || {};
+      return responseData.file || responseData.data || {};
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+
+      throw new ApiError('网络错误，请检查连接', 0);
+    }
   },
 
   deleteFile: async (id: number): Promise<void> => {
@@ -402,9 +410,6 @@ export const API = {
         formData.append('photos', photo);
       });
     }
-
-    const token = await storage.getItem('auth_token');
-    const url = `${API_BASE_URL}/commands/${id}/feedback`;
 
     try {
       const responseData = await request<any>(`/commands/${id}/feedback`, {
