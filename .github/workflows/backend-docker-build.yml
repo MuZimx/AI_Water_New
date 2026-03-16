@@ -1,0 +1,41 @@
+name: backend-docker-build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-docker-build.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-docker-build.yml"
+
+jobs:
+  build-backend-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          tags: ai-water-backend:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/ai-water-backend-${{ github.sha }}.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-water-backend-image-${{ github.sha }}
+          path: /tmp/ai-water-backend-${{ github.sha }}.tar
+          if-no-files-found: error
