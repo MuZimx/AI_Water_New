@@ -14,6 +14,12 @@
 
 </div>
 
+## 一键安装
+
+```bash
+curl -sSL https://raw.githubusercontent.com/MuZimx/AI_Water_New/refs/heads/main/install-backend.sh | bash
+```
+
 ## 功能特性
 
 - 🔐 **用户认证系统**: 支持管理员初始化、用户登录、JWT 令牌认证
