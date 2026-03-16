@@ -3,6 +3,9 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
 export const FILE_BASE_URL = API_BASE_URL.replace(/\/api\/?$/, '');
 
+// 导入 Capacitor 存储工具
+import { storage } from './storage';
+
 export type RiskLevel = '高风险' | '中风险' | '低风险' | '未检测';
 
 export interface AudioFile {
@@ -80,11 +83,8 @@ async function request<T>(
     ...options.headers,
   };
 
-  // 如果有 token（仅在浏览器环境），添加认证头
-  let token: string | null = null;
-  if (typeof window !== 'undefined' && window.localStorage) {
-    token = localStorage.getItem('auth_token');
-  }
+  // 如果有 token，添加认证头
+  const token = await storage.getItem('auth_token');
   if (token) {
     (defaultHeaders as any)['Authorization'] = `Bearer ${token}`;
   }
@@ -144,7 +144,7 @@ export const API = {
     });
 
     if (response.success && response.data) {
-      localStorage.setItem('auth_token', response.data.accessToken);
+      await storage.setItem('auth_token', response.data.accessToken);
       return {
         user: response.data.user,
         token: response.data.accessToken
@@ -165,7 +165,7 @@ export const API = {
     if (response.success && response.data) {
       // 若后端返回 token，则保存
       if (response.data.accessToken) {
-        localStorage.setItem('auth_token', response.data.accessToken);
+        await storage.setItem('auth_token', response.data.accessToken);
       }
       return { user: response.data.user, token: response.data.accessToken };
     }
@@ -173,7 +173,7 @@ export const API = {
   },
 
   logout: async (): Promise<void> => {
-    localStorage.removeItem('auth_token');
+    await storage.removeItem('auth_token');
   },
 
   getCurrentUser: async (): Promise<User | null> => {
@@ -234,7 +234,7 @@ export const API = {
       formData.append('sensor_id', sensorId.toString());
     }
 
-    const token = localStorage.getItem('auth_token');
+    const token = await storage.getItem('auth_token');
     const url = `${API_BASE_URL}/upload-audio`;
 
     try {
@@ -404,7 +404,7 @@ export const API = {
       });
     }
 
-    const token = localStorage.getItem('auth_token');
+    const token = await storage.getItem('auth_token');
     const url = `${API_BASE_URL}/commands/${id}/feedback`;
 
     try {
