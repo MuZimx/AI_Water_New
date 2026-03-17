@@ -16,8 +16,11 @@ RUN npm ci
 COPY . .
 
 RUN python3 -m venv /opt/venv \
-	&& /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
-	&& /opt/venv/bin/pip install --no-cache-dir -r py/requirements.txt
+	&& /opt/venv/bin/pip install --no-cache-dir --upgrade pip
+
+# 安装Python依赖
+RUN /opt/venv/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+RUN /opt/venv/bin/pip install macls -U -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHON_BIN=/opt/venv/bin/python
