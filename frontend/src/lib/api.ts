@@ -1,6 +1,6 @@
 // 真实后端 API 客户端
 // 配置后端服务器地址
-const rawApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || '/api';
+const rawApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api-aiwater.cszj.wang/api';
 const API_BASE_URL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/api\/?$/i.test(rawApiBaseUrl)
   ? '/api'
   : rawApiBaseUrl;
@@ -92,6 +92,15 @@ async function request<T>(
     (defaultHeaders as any)['Authorization'] = `Bearer ${token}`;
   }
 
+  // 调试日志
+  console.log('[API Request]', {
+    url,
+    method: options.method || 'GET',
+    hasToken: !!token,
+    headers: defaultHeaders,
+    body: isFormData ? '[FormData]' : options.body
+  });
+
   try {
     const response = await fetch(url, {
       ...options,
@@ -109,6 +118,15 @@ async function request<T>(
       data = text ? { message: text, raw: text } : null;
     }
 
+    // 调试日志
+    console.log('[API Response]', {
+      url,
+      status: response.status,
+      ok: response.ok,
+      data,
+      contentType
+    });
+
     if (!response.ok) {
       const fallbackMsg = response.statusText || `请求失败: ${response.status}`;
       const message = (data as any)?.message || fallbackMsg;
@@ -117,6 +135,11 @@ async function request<T>(
 
     return (data ?? {}) as T;
   } catch (error) {
+    console.error('[API Error]', {
+      url,
+      error: error instanceof Error ? error.message : error,
+      errorObj: error
+    });
     if (error instanceof ApiError) {
       throw error;
     }

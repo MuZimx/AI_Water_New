@@ -1,8 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- 基础配置：允许明文流量 -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
+            <certificates src="user" />
         </trust-anchors>
     </base-config>
+
+    <!-- 信任特定域名，包括调试证书 -->
+    <domain-config>
+        <domain includeSubdomains="true">api-aiwater.cszj.wang</domain>
+        <domain includeSubdomains="true">cszj.wang</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+
+    <!-- 调试配置：允许所有证书（仅开发环境） -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
 </network-security-config>
