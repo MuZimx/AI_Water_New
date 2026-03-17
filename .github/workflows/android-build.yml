@@ -1,0 +1,94 @@
+name: Android Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-build.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-build.yml"
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_BASE_URL: https://api-aiwater.cszj.wang/api
+      BACKEND_ORIGIN: https://api-aiwater.cszj.wang
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets
+        run: |
+          npm run build
+          if [ ! -d "out" ]; then
+            echo "未检测到 out 目录，尝试执行 next export..."
+            npx next export
+          fi
+          if [ ! -d "out" ]; then
+            echo "out 目录不存在，请确认 Next.js 已导出静态资源到 out。"
+            exit 1
+          fi
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Generate signing keystore
+        run: |
+          keytool -genkeypair \
+            -v \
+            -keystore android/ci-release.keystore \
+            -storepass "android" \
+            -keypass "android" \
+            -alias "ci-release" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 36500 \
+            -dname "CN=AI Water CI, OU=DevOps, O=AI Water, L=Hangzhou, S=Zhejiang, C=CN"
+
+      - name: Build signed Android APK (release)
+        run: |
+          SIGNING_KEYSTORE_PATH="$PWD/android/ci-release.keystore"
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file="$SIGNING_KEYSTORE_PATH" \
+            -Pandroid.injected.signing.store.password="android" \
+            -Pandroid.injected.signing.key.alias="ci-release" \
+            -Pandroid.injected.signing.key.password="android"
+
+      - name: Verify APK signature
+        run: |
+          jarsigner -verify -verbose -certs android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-water-android-apk
+          path: frontend/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
