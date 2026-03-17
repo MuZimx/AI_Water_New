@@ -22,6 +22,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_BASE_URL: https://api-aiwater.cszj.wang/api
       BACKEND_ORIGIN: https://api-aiwater.cszj.wang
+      BUILD_ANDROID_STATIC: "true"
 
     steps:
       - name: Checkout
@@ -47,11 +48,7 @@ jobs:
         run: |
           npm run build
           if [ ! -d "out" ]; then
-            echo "未检测到 out 目录，尝试执行 next export..."
-            npx next export
-          fi
-          if [ ! -d "out" ]; then
-            echo "out 目录不存在，请确认 Next.js 已导出静态资源到 out。"
+            echo "out 目录不存在，请确认 next.config.ts 已启用 output: 'export'。"
             exit 1
           fi
 

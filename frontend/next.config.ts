@@ -1,9 +1,11 @@
 import type {NextConfig} from 'next';
 
 const backendOrigin = process.env.BACKEND_ORIGIN || 'http://localhost:3001';
+const isStaticExportBuild = process.env.BUILD_ANDROID_STATIC === 'true';
 
 const nextConfig: NextConfig = {
   /* config options here */
+  ...(isStaticExportBuild ? { output: 'export' } : {}),
   turbopack: {
     root: __dirname,
   },
@@ -17,6 +19,10 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   async rewrites() {
+    if (isStaticExportBuild) {
+      return [];
+    }
+
     return [
       {
         source: '/api/:path*',
