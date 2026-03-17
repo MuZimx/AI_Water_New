@@ -4,6 +4,11 @@ const config: CapacitorConfig = {
   appId: 'com.aiwater.app',
   appName: 'AI_Water',
   webDir: 'out',
+  plugins: {
+    StatusBar: {
+      overlay: false,
+    },
+  },
   server: {
     // 使用 HTTPS 作为 Android 的导航方案，防止外部链接劫持
     androidScheme: 'https',
