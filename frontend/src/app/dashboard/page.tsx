@@ -338,10 +338,10 @@ export default function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-20 md:pb-0">
+    <div className="min-h-screen bg-background flex flex-col pb-20 md:pb-0 overflow-x-hidden">
       {/* 顶部导航栏 */}
       <header className="sticky top-0 z-[2000] w-full border-b bg-white/80 backdrop-blur-md">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="w-full px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="bg-primary p-2 rounded-lg shadow-sm">
               <Waves className="h-5 w-5 text-white" />
@@ -416,8 +416,8 @@ export default function DashboardPage() {
       {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
       {!isOnline && (
         <div className="relative z-30 bg-destructive text-destructive-foreground border-b">
-          <div className="container mx-auto px-4 py-2 text-sm font-medium">
-            当前处于离线状态，数据可能不会实时更新。
+          <div className="w-full px-4 py-2 text-sm font-medium">
+            当前处于离线状态,数据可能不会实时更新。
           </div>
         </div>
       )}
@@ -425,13 +425,13 @@ export default function DashboardPage() {
       {/* 工人任务提醒横幅（仅工人且状态为工作中时显示） */}
       {currentUser?.role === '工人' && workerStatus?.status === '工作中' && (
         <div className="relative z-20 bg-gradient-to-r from-orange-500 to-amber-500 text-white border-b border-orange-600 shadow-lg">
-          <div className="container mx-auto px-4 py-4">
+          <div className="w-full px-4 py-4">
             <div className="flex items-center gap-4">
               <div className="bg-white/20 p-3 rounded-full animate-pulse">
                 <Bell className="h-6 w-6" />
               </div>
-              <div className="flex-1">
-                <p className="font-bold text-lg">正在进行维修任务</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-lg truncate">正在进行维修任务</p>
                 <p className="text-white/90 text-sm mt-1">请查看任务详情并处理</p>
               </div>
               <Button
@@ -442,7 +442,7 @@ export default function DashboardPage() {
                   setTaskDialogOpen(true);
                 }}
                 variant="secondary"
-                className="bg-white text-orange-600 hover:bg-orange-50 pointer-events-auto relative z-10"
+                className="bg-white text-orange-600 hover:bg-orange-50 pointer-events-auto relative z-10 shrink-0"
               >
                 查看详情
                 <ChevronRight className="ml-2 h-4 w-4" />
@@ -452,9 +452,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <main className="container mx-auto max-w-[1400px] p-4 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
+      <main className="w-full p-4 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4 max-w-screen-2xl mx-auto overflow-x-hidden">
         {/* 地图卡片（左上） */}
-        <div className="lg:col-span-12">
+        <div className="lg:col-span-12 min-w-0">
           <Card>
             <CardHeader>
               <CardTitle>地图总览</CardTitle>
@@ -474,7 +474,7 @@ export default function DashboardPage() {
           </Card>
         </div>
         {/* 左侧：列表 */}
-        <div className="lg:col-span-7 space-y-6">
+        <div className="lg:col-span-7 space-y-6 min-w-0">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">手动检查</h2>
@@ -837,8 +837,8 @@ export default function DashboardPage() {
         </div>
 
         {/* 右侧：详情面板 */}
-        <div className="lg:col-span-5">
-          <div className="lg:sticky lg:top-24 space-y-6">
+        <div className="lg:col-span-5 min-w-0">
+          <div className="lg:sticky lg:top-24 space-y-6 overflow-hidden">
             {selectedFile ? (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 sm:slide-in-from-right-4 duration-300">
                 <Card className="overflow-hidden shadow-xl border-none">
@@ -920,7 +920,7 @@ export default function DashboardPage() {
 
       {/* 底部版权信息 (仅 PC) */}
       <footer className="hidden md:block py-6 border-t bg-white">
-        <div className="container mx-auto px-4 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="w-full px-4 flex items-center justify-between text-xs text-muted-foreground">
           <p>© {new Date().getFullYear()} AI Water 监控系统。所有关键指标运行正常。</p>
           <div className="flex items-center gap-6">
             <span className="flex items-center gap-1.5">
