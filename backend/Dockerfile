@@ -6,7 +6,7 @@ ENV NODE_ENV=production
 ENV DATABASE_URL=file:./data/users.db
 
 RUN apt-get update -y \
-	&& apt-get install -y --no-install-recommends openssl python3 python3-pip \
+	&& apt-get install -y --no-install-recommends openssl python3 python3-pip python3-venv \
 	&& ln -sf /usr/bin/python3 /usr/bin/python \
 	&& rm -rf /var/lib/apt/lists/*
 
@@ -15,7 +15,12 @@ RUN npm ci
 
 COPY . .
 
-RUN pip3 install --no-cache-dir -r py/requirements.txt
+RUN python3 -m venv /opt/venv \
+	&& /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
+	&& /opt/venv/bin/pip install --no-cache-dir -r py/requirements.txt
+
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHON_BIN=/opt/venv/bin/python
 
 RUN mkdir -p /app/data /app/uploads
 
