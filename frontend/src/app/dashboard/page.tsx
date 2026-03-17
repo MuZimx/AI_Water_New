@@ -673,55 +673,55 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid gap-3">
+                <div className="grid gap-2.5">
                   {filteredFiles.map((file) => (
                     <Card
                       key={file.id}
                       className={cn(
-                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm",
+                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm py-4 sm:py-3",
                         selectedFile?.id === file.id ? 'border-primary ring-1 ring-primary/20 shadow-md scale-[1.01]' : 'hover:border-primary/20'
                       )}
                       onClick={() => setSelectedFile(file)}
                     >
-                      <CardContent className="p-4 flex items-center gap-4">
+                      <CardContent className="flex items-center gap-3 px-3 sm:px-4">
                         <div className={cn(
-                          "p-3 rounded-xl flex-shrink-0",
+                          "p-2.5 rounded-lg flex-shrink-0",
                           file.status === 'processing' ? 'bg-secondary/10' : 'bg-muted'
                         )}>
                           {file.status === 'processing' ? (
-                            <RefreshCw className="h-6 w-6 text-secondary animate-spin" />
+                            <RefreshCw className="h-5 w-5 text-secondary animate-spin" />
                           ) : (
-                            <FileAudio className="h-6 w-6 text-primary" />
+                            <FileAudio className="h-5 w-5 text-primary" />
                           )}
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-medium truncate text-sm sm:text-base">{file.original_name}</h4>
-                            <RiskBadge level={file.risk_level} className="text-[10px]" />
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <h4 className="font-medium truncate text-xs sm:text-sm">{file.original_name}</h4>
+                            <RiskBadge level={file.risk_level} className="text-[9px]" />
                           </div>
-                          <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-muted-foreground flex-wrap">
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
-                            <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                            <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30 hidden sm:inline" />
+                            <span className="hidden sm:inline">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                             {file.sensor && (
                               <>
-                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                                <span className="text-primary font-medium">传感器: {file.sensor.name}</span>
+                                <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30 sm:inline hidden" />
+                                <span className="text-primary font-medium truncate">传感器: {file.sensor.name}</span>
                               </>
                             )}
                             {file.status === 'completed' && file.risk_level !== '未检测' && (
                               <>
-                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
+                                <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30" />
                                 <span className="text-primary font-bold">置信度 {Math.round(file.confidence * 100)}%</span>
                               </>
                             )}
                           </div>
                         </div>
 
-                        <div className="hidden sm:flex items-center gap-2">
-                           {file.status === 'completed' && <PlayCircle className="h-5 w-5 text-primary/40" />}
-                           <ChevronRight className={cn("h-5 w-5 transition-transform", selectedFile?.id === file.id ? 'rotate-90' : 'text-muted-foreground')} />
+                        <div className="hidden sm:flex items-center gap-1.5">
+                           {file.status === 'completed' && <PlayCircle className="h-4 w-4 text-primary/40" />}
+                           <ChevronRight className={cn("h-4 w-4 transition-transform", selectedFile?.id === file.id ? 'rotate-90' : 'text-muted-foreground')} />
                         </div>
                       </CardContent>
                     </Card>
@@ -739,46 +739,46 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid gap-3">
+                <div className="grid gap-2.5">
                   {filteredFiles.map((file) => (
                     <Card
                       key={file.id}
                       className={cn(
-                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm",
+                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm py-4 sm:py-3",
                         selectedFile?.id === file.id ? 'border-primary ring-1 ring-primary/20 shadow-md scale-[1.01]' : 'hover:border-primary/20'
                       )}
                       onClick={() => setSelectedFile(file)}
                     >
-                      <CardContent className="p-4 flex items-center gap-4">
+                      <CardContent className="flex items-center gap-3 px-3 sm:px-4">
                         <div className={cn(
-                          "p-3 rounded-xl flex-shrink-0",
+                          "p-2.5 rounded-lg flex-shrink-0",
                           file.status === 'processing' ? 'bg-secondary/10' : 'bg-destructive/10'
                         )}>
                           {file.status === 'processing' ? (
-                            <RefreshCw className="h-6 w-6 text-secondary animate-spin" />
+                            <RefreshCw className="h-5 w-5 text-secondary animate-spin" />
                           ) : (
-                            <FileAudio className="h-6 w-6 text-destructive" />
+                            <FileAudio className="h-5 w-5 text-destructive" />
                           )}
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-medium truncate text-sm sm:text-base">{file.original_name}</h4>
-                            <RiskBadge level={file.risk_level} className="text-[10px]" />
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <h4 className="font-medium truncate text-xs sm:text-sm">{file.original_name}</h4>
+                            <RiskBadge level={file.risk_level} className="text-[9px]" />
                           </div>
-                          <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-muted-foreground flex-wrap">
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
                             {file.sensor && (
                               <>
-                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                                <span className="text-destructive font-medium">传感器: {file.sensor.name}</span>
+                                <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30 sm:inline hidden" />
+                                <span className="text-destructive font-medium truncate">传感器: {file.sensor.name}</span>
                               </>
                             )}
                           </div>
                         </div>
 
-                        <div className="hidden sm:flex items-center gap-2">
-                           <ChevronRight className={cn("h-5 w-5 transition-transform", selectedFile?.id === file.id ? 'rotate-90' : 'text-muted-foreground')} />
+                        <div className="hidden sm:flex items-center gap-1.5">
+                           <ChevronRight className={cn("h-4 w-4 transition-transform", selectedFile?.id === file.id ? 'rotate-90' : 'text-muted-foreground')} />
                         </div>
                       </CardContent>
                     </Card>
@@ -796,33 +796,33 @@ export default function DashboardPage() {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="grid gap-3">
+                <div className="grid gap-2.5">
                   {filteredFiles.map((file) => (
                     <Card
                       key={file.id}
                       className={cn(
-                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm",
+                        "cursor-pointer transition-all hover:shadow-md border border-transparent bg-white/70 backdrop-blur-sm py-4 sm:py-3",
                         selectedFile?.id === file.id ? 'border-primary ring-1 ring-primary/20 shadow-md scale-[1.01]' : 'hover:border-primary/20'
                       )}
                       onClick={() => setSelectedFile(file)}
                     >
-                      <CardContent className="p-4 flex items-center gap-4">
-                        <div className="p-3 rounded-xl bg-secondary/10 flex-shrink-0">
-                          <RefreshCw className="h-6 w-6 text-secondary animate-spin" />
+                      <CardContent className="flex items-center gap-3 px-3 sm:px-4">
+                        <div className="p-2.5 rounded-lg bg-secondary/10 flex-shrink-0">
+                          <RefreshCw className="h-5 w-5 text-secondary animate-spin" />
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-medium truncate text-sm sm:text-base">{file.original_name}</h4>
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <h4 className="font-medium truncate text-xs sm:text-sm">{file.original_name}</h4>
                           </div>
-                          <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
+                          <div className="flex items-center gap-2 text-[9px] sm:text-[10px] text-muted-foreground flex-wrap">
                             <span>{format(new Date(file.upload_time), 'yyyy/MM/dd HH:mm')}</span>
-                            <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                            <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                            <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30 hidden sm:inline" />
+                            <span className="hidden sm:inline">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                             {file.sensor && (
                               <>
-                                <span className="w-1 h-1 rounded-full bg-muted-foreground/30" />
-                                <span className="text-primary font-medium">传感器: {file.sensor.name}</span>
+                                <span className="w-0.5 h-0.5 rounded-full bg-muted-foreground/30 sm:inline hidden" />
+                                <span className="text-primary font-medium truncate">传感器: {file.sensor.name}</span>
                               </>
                             )}
                           </div>
