@@ -92,7 +92,7 @@ export default function MaintenancePage() {
   };
 
   const handleViewRecord = (id: number) => {
-    router.push(`/maintenance/${id}`);
+    router.push(`/maintenance/detail?id=${id}`);
   };
 
   const getStatusIcon = (status: string) => {

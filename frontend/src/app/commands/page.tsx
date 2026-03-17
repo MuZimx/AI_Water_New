@@ -95,7 +95,7 @@ export default function CommandsPage() {
   };
 
   const handleViewCommand = (id: number) => {
-    router.push(`/commands/${id}`);
+    router.push(`/commands/detail?id=${id}`);
   };
 
   const getStatusIcon = (status: string) => {

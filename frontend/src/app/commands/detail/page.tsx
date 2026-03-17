@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import React, { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   Clock,
@@ -72,9 +72,9 @@ interface Command {
   }>;
 }
 
-export default function CommandDetailPage() {
+function CommandDetailContent() {
   const router = useRouter();
-  const params = useParams();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<ApiUser | null>(null);
   const [command, setCommand] = useState<Command | null>(null);
@@ -85,11 +85,17 @@ export default function CommandDetailPage() {
   const [feedbackPhotos, setFeedbackPhotos] = useState<File[]>([]);
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
-  const commandId = params.id as string;
+  const commandId = searchParams.get('id');
 
   useEffect(() => {
+    if (!commandId) {
+      toast({ variant: "destructive", title: "参数错误", description: "缺少命令 ID" });
+      router.push('/commands');
+      return;
+    }
+
     loadUser();
-  }, []);
+  }, [commandId]);
 
   const loadUser = async () => {
     try {
@@ -108,7 +114,12 @@ export default function CommandDetailPage() {
   const loadCommand = async () => {
     try {
       setLoading(true);
-      const data = await API.getCommand(parseInt(commandId));
+      const id = Number(commandId);
+      if (!Number.isFinite(id)) {
+        throw new Error('无效的命令 ID');
+      }
+
+      const data = await API.getCommand(id);
       setCommand(data);
       setStatus(data.recipient_status || '未执行');
     } catch (error: any) {
@@ -510,5 +521,22 @@ export default function CommandDetailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CommandDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background p-4 md:p-6 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <RefreshCw className="h-8 w-8 text-primary animate-spin mx-auto" />
+            <p className="text-muted-foreground">加载中...</p>
+          </div>
+        </div>
+      }
+    >
+      <CommandDetailContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import React, { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   Clock,
@@ -42,9 +42,9 @@ interface MaintenanceRecord {
   }>;
 }
 
-export default function MaintenanceDetailPage() {
+function MaintenanceDetailContent() {
   const router = useRouter();
-  const params = useParams();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<TUser | null>(null);
   const [record, setRecord] = useState<MaintenanceRecord | null>(null);
@@ -52,9 +52,15 @@ export default function MaintenanceDetailPage() {
   const [status, setStatus] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  const recordId = params.id as string;
+  const recordId = searchParams.get('id');
 
   useEffect(() => {
+    if (!recordId) {
+      toast({ variant: "destructive", title: "参数错误", description: "缺少记录 ID" });
+      router.push('/maintenance');
+      return;
+    }
+
     loadUser();
     loadRecord();
   }, [recordId]);
@@ -75,7 +81,12 @@ export default function MaintenanceDetailPage() {
   const loadRecord = async () => {
     try {
       setLoading(true);
-      const data = await API.getMaintenanceRecord(parseInt(recordId));
+      const id = Number(recordId);
+      if (!Number.isFinite(id)) {
+        throw new Error('无效的记录 ID');
+      }
+
+      const data = await API.getMaintenanceRecord(id);
       setRecord(data);
       setStatus(data.status);
     } catch (error: any) {
@@ -274,5 +285,22 @@ export default function MaintenanceDetailPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function MaintenanceDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background p-4 md:p-6 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <RefreshCw className="h-8 w-8 text-primary animate-spin mx-auto" />
+            <p className="text-muted-foreground">加载中...</p>
+          </div>
+        </div>
+      }
+    >
+      <MaintenanceDetailContent />
+    </Suspense>
   );
 }
