@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
-const { PythonShell } = require('python-shell');
+const { execFile } = require('child_process');
 const chokidar = require('chokidar');
 const { prisma } = require('./db/prisma');
 const { 
@@ -224,6 +224,65 @@ function createRequestId() {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+const AI_INFERENCE_BIN = process.env.AI_INFERENCE_BIN || '';
+const AI_INFERENCE_TIMEOUT_MS = Number(process.env.AI_INFERENCE_TIMEOUT_MS || 120000);
+
+function normalizePredictionResult(raw = {}) {
+  if (raw && raw.error) {
+    throw new Error(String(raw.error));
+  }
+
+  const riskLevel = raw.risk_level || raw.label || raw.result;
+  const confidenceValue = Number(raw.confidence ?? raw.score ?? 0);
+
+  if (!riskLevel) {
+    throw new Error('推理结果缺少 risk_level 字段');
+  }
+
+  return {
+    risk_level: String(riskLevel),
+    confidence: Number.isFinite(confidenceValue) ? confidenceValue : 0
+  };
+}
+
+function runBinaryInference(filePath, dirpath) {
+  return new Promise((resolve, reject) => {
+    if (!AI_INFERENCE_BIN) {
+      reject(new Error('AI_INFERENCE_BIN 未配置，无法执行二进制推理'));
+      return;
+    }
+
+    execFile(
+      AI_INFERENCE_BIN,
+      [filePath, dirpath],
+      { timeout: AI_INFERENCE_TIMEOUT_MS },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(`二进制推理失败: ${error.message}; stderr: ${trimLongValue(stderr || '', 300)}`));
+          return;
+        }
+
+        const output = String(stdout || '').trim();
+        if (!output) {
+          reject(new Error('二进制推理没有输出结果'));
+          return;
+        }
+
+        try {
+          const lastLine = output.split(/\r?\n/).filter(Boolean).pop();
+          resolve(JSON.parse(lastLine));
+        } catch (parseError) {
+          reject(new Error(`二进制推理输出不是有效JSON: ${trimLongValue(output, 300)}`));
+        }
+      }
+    );
+  });
+}
+
+async function runInference(filePath, dirpath) {
+  return await runBinaryInference(filePath, dirpath);
 }
 
 function writeLog(level, message, meta = {}) {
@@ -1110,7 +1169,7 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ success: true, message: '退出成功' });
 });
 
-// 使用Python模型处理单个音频文件
+// 使用二进制推理引擎处理单个音频文件
 function processAudioFile(file,id) {
   return new Promise((resolve, reject) => {
     const filePath = file;
@@ -1128,13 +1187,6 @@ function processAudioFile(file,id) {
       message: '开始处理音频文件'
     });
 
-    // 配置PythonShell选项
-    const options = {
-      scriptPath: dirpath,
-      pythonPath: process.env.PYTHON_BIN || 'python',
-      args: [filePath, dirpath]
-    };
-
     // 更新处理状态
     processingStatus.set(path.basename(file), {
       status: 'processing',
@@ -1143,17 +1195,10 @@ function processAudioFile(file,id) {
     });
 
     try {
-      // 调用Python脚本进行预测
-      PythonShell.run('predict.py', options).then(async (results) => {
-        console.log('Python results:', results);
-
-        if (!results || results.length === 0) {
-          throw new Error('Python脚本没有返回结果');
-        }
-
-        // 解析Python脚本返回的JSON结果
-        const prediction = JSON.parse(results[0]);
-        console.log('Prediction result:', prediction);
+      // 调用推理引擎进行预测
+      runInference(filePath, dirpath).then(async rawPrediction => {
+        const prediction = normalizePredictionResult(rawPrediction);
+        console.log('Prediction result:', prediction, 'engine:binary');
 
         // 更新处理状态
         processingStatus.set(audioFile.id, {
@@ -1221,20 +1266,20 @@ function processAudioFile(file,id) {
           return reject(err);
         }
       }).catch(error => {
-        console.error('PythonShell执行出错:', error);
+        console.error('推理引擎执行出错:', error);
         processingStatus.set(path.basename(file), {
           status: 'error',
           progress: 0,
-          message: `Python执行出错: ${error.message}`
+          message: `推理执行出错: ${error.message}`
         });
         reject(error);
       });
     } catch (error) {
-      console.error('Python处理出错:', error);
+      console.error('推理处理出错:', error);
       processingStatus.set(path.basename(file), {
         status: 'error',
         progress: 0,
-        message: 'Python处理出错'
+        message: '推理处理出错'
       });
       reject(error);
     }

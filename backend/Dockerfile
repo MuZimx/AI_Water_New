@@ -1,31 +1,43 @@
+FROM python:3.11-slim AS infer-builder
+
+WORKDIR /build
+
+RUN apt-get update -y \
+	&& apt-get install -y --no-install-recommends build-essential \
+	&& rm -rf /var/lib/apt/lists/*
+
+COPY py ./py
+
+RUN pip install --no-cache-dir --upgrade pip \
+	&& pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu \
+	&& pip install --no-cache-dir macls -U -i https://pypi.tuna.tsinghua.edu.cn/simple \
+	&& pip install --no-cache-dir pyinstaller
+
+RUN pyinstaller --clean --noconfirm --onefile --name aiwater_infer \
+	--collect-all macls \
+	--collect-all paddlespeech \
+	py/predict.py
+
 FROM node:20-bookworm-slim
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 ENV DATABASE_URL=file:./data/users.db
+ENV AI_INFERENCE_BIN=/app/bin/aiwater_infer
 
 RUN apt-get update -y \
-	&& apt-get install -y --no-install-recommends openssl python3 python3-pip python3-venv python3-dev build-essential \
-	&& ln -sf /usr/bin/python3 /usr/bin/python \
+	&& apt-get install -y --no-install-recommends openssl \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
 RUN npm ci
 
 COPY . .
+COPY --from=infer-builder /build/dist/aiwater_infer /app/bin/aiwater_infer
 
-RUN python3 -m venv /opt/venv \
-	&& /opt/venv/bin/pip install --no-cache-dir --upgrade pip
-
-# 安装Python依赖
-RUN /opt/venv/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-RUN /opt/venv/bin/pip install macls -U -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-ENV PATH="/opt/venv/bin:$PATH"
-ENV PYTHON_BIN=/opt/venv/bin/python
-
-RUN mkdir -p /app/data /app/uploads
+RUN chmod +x /app/bin/aiwater_infer \
+	&& mkdir -p /app/data /app/uploads
 
 RUN npm run prisma:generate
 
