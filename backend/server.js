@@ -122,6 +122,103 @@ function getClientIp(req) {
   return req.socket?.remoteAddress || req.ip;
 }
 
+function normalizeApiPath(pathname = '') {
+  const cleanPath = String(pathname).split('?')[0];
+  const segments = cleanPath.split('/').filter(Boolean);
+  if (segments[0] === 'api') {
+    segments.shift();
+  }
+
+  const normalizedSegments = segments.map(segment => {
+    if (/^\d+$/.test(segment)) {
+      return ':id';
+    }
+
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segment)) {
+      return ':id';
+    }
+
+    if (/^[0-9a-f]{24}$/i.test(segment)) {
+      return ':id';
+    }
+
+    return segment;
+  });
+
+  return `/api/${normalizedSegments.join('/')}`.replace(/\/$/, '') || '/api';
+}
+
+function getApiCategory(pathname = '') {
+  const normalizedPath = normalizeApiPath(pathname);
+  const segments = normalizedPath.replace(/^\/api\/?/, '').split('/').filter(Boolean);
+  if (segments.length === 0) {
+    return 'api.root';
+  }
+
+  if (segments.length === 1) {
+    return `api.${segments[0]}`;
+  }
+
+  return `api.${segments[0]}.${segments[1]}`;
+}
+
+function hasContent(value) {
+  if (value == null) {
+    return false;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === 'object') {
+    return Object.keys(value).length > 0;
+  }
+
+  return true;
+}
+
+function summarizeUploadedFiles(req) {
+  const normalizeFile = file => ({
+    field: file.fieldname,
+    name: trimLongValue(file.originalname, 200),
+    mimeType: file.mimetype,
+    size: file.size
+  });
+
+  if (req.file) {
+    return [normalizeFile(req.file)];
+  }
+
+  if (Array.isArray(req.files)) {
+    return req.files.slice(0, 10).map(normalizeFile);
+  }
+
+  if (req.files && typeof req.files === 'object') {
+    const groupedFiles = [];
+    Object.entries(req.files).forEach(([fieldName, files]) => {
+      if (!Array.isArray(files)) {
+        return;
+      }
+
+      files.slice(0, 5).forEach(file => {
+        groupedFiles.push({
+          ...normalizeFile(file),
+          field: fieldName
+        });
+      });
+    });
+
+    return groupedFiles.slice(0, 10);
+  }
+
+  return [];
+}
+
 function createRequestId() {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -402,11 +499,24 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use((req, res, next) => {
   const requestId = req.headers['x-request-id'] || createRequestId();
   const requestStartAt = process.hrtime.bigint();
+  const endpoint = `${req.method} ${req.path}`;
+  const routePattern = normalizeApiPath(req.path);
+  const apiCategory = getApiCategory(req.path);
   const safeRequestHeaders = sanitizeForLog({
     'user-agent': req.headers['user-agent'],
     'content-type': req.headers['content-type'],
     authorization: req.headers.authorization
   });
+  const requestParams = {};
+  const safeQuery = sanitizeForLog(req.query || {});
+  const safeBody = LOG_BODY_ENABLED ? sanitizeForLog(req.body || {}) : undefined;
+
+  if (hasContent(safeQuery)) {
+    requestParams.query = safeQuery;
+  }
+  if (LOG_BODY_ENABLED && hasContent(safeBody)) {
+    requestParams.body = safeBody;
+  }
 
   req.requestId = requestId;
   res.setHeader('X-Request-Id', requestId);
@@ -426,14 +536,16 @@ app.use((req, res, next) => {
   };
 
   if (req.path.startsWith('/api')) {
-    writeLog('info', 'api_request_start', {
+    writeLog('info', 'api.start', {
       requestId,
+      endpoint,
+      routePattern,
+      apiCategory,
       method: req.method,
       path: req.originalUrl,
       ip: getClientIp(req),
-      query: sanitizeForLog(req.query || {}),
       headers: safeRequestHeaders,
-      body: LOG_BODY_ENABLED ? sanitizeForLog(req.body || {}) : undefined
+      params: requestParams
     });
   }
 
@@ -452,14 +564,20 @@ app.use((req, res, next) => {
       normalizedResponseBody = trimLongValue(responseBody);
     }
 
-    writeLog(level, 'api_request_end', {
+    const uploadedFiles = summarizeUploadedFiles(req);
+
+    writeLog(level, 'api.end', {
       requestId,
+      endpoint,
+      routePattern,
+      apiCategory,
       method: req.method,
       path: req.originalUrl,
       statusCode: res.statusCode,
       durationMs: Number(durationMs.toFixed(2)),
       userId: req.user?.id || null,
       userRole: req.user?.role || null,
+      files: uploadedFiles.length > 0 ? uploadedFiles : undefined,
       responseBody: LOG_BODY_ENABLED ? sanitizeForLog(normalizedResponseBody) : undefined
     });
   });
@@ -1013,6 +1131,7 @@ function processAudioFile(file,id) {
     // 配置PythonShell选项
     const options = {
       scriptPath: dirpath,
+      pythonPath: process.env.PYTHON_BIN || 'python',
       args: [filePath, dirpath]
     };
 
