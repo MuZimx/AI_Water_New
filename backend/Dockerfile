@@ -6,7 +6,7 @@ ENV NODE_ENV=production
 ENV DATABASE_URL=file:./data/users.db
 
 RUN apt-get update -y \
-	&& apt-get install -y --no-install-recommends openssl python3 python3-pip python3-venv \
+	&& apt-get install -y --no-install-recommends openssl python3 python3-pip python3-venv python3-dev build-essential \
 	&& ln -sf /usr/bin/python3 /usr/bin/python \
 	&& rm -rf /var/lib/apt/lists/*
 
