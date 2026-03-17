@@ -938,22 +938,25 @@ export default function DashboardPage() {
           <Home className="h-5 w-5" />
           <span className="text-[10px] font-medium">概览</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('high')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'high' ? 'text-destructive' : 'text-muted-foreground')}>
-          <Bell className="h-5 w-5" />
-          <span className="text-[10px] font-medium">预警</span>
+        <button type="button" onClick={() => router.push('/maintenance')} className="flex flex-col items-center gap-1 text-muted-foreground transition-colors">
+          <Wrench className="h-5 w-5" />
+          <span className="text-[10px] font-medium">检修</span>
         </button>
-        <button
-          type="button"
-          aria-label="上传采集样本"
-          title="上传采集样本"
-          className="flex flex-col items-center gap-1 -mt-8 bg-primary p-3 rounded-full shadow-lg text-white ring-4 ring-background"
-        >
-           <Plus className="h-6 w-6" />
+        <button type="button" onClick={() => router.push('/commands')} className="flex flex-col items-center gap-1 text-muted-foreground transition-colors">
+          <MessageSquare className="h-5 w-5" />
+          <span className="text-[10px] font-medium">命令</span>
         </button>
-        <button type="button" onClick={() => setActiveTab('processing')} className={cn("flex flex-col items-center gap-1 transition-colors", activeTab === 'processing' ? 'text-secondary' : 'text-muted-foreground')}>
-          <Activity className="h-5 w-5" />
-          <span className="text-[10px] font-medium">分析</span>
-        </button>
+        {currentUser?.role === '管理员' ? (
+          <button type="button" onClick={() => router.push('/sensors')} className="flex flex-col items-center gap-1 text-muted-foreground transition-colors">
+            <MapPin className="h-5 w-5" />
+            <span className="text-[10px] font-medium">传感器</span>
+          </button>
+        ) : (
+          <button type="button" onClick={() => router.push('/commands')} className="flex flex-col items-center gap-1 text-muted-foreground transition-colors">
+            <MessageSquare className="h-5 w-5" />
+            <span className="text-[10px] font-medium">任务</span>
+          </button>
+        )}
         <button type="button" onClick={() => router.push('/profile')} className="flex flex-col items-center gap-1 text-muted-foreground">
           <User className="h-5 w-5" />
           <span className="text-[10px] font-medium">设置</span>
