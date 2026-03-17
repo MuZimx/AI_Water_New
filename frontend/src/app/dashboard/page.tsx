@@ -452,7 +452,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <main className="container mx-auto p-4 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
+      <main className="container mx-auto max-w-[1400px] p-4 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
         {/* 地图卡片（左上） */}
         <div className="lg:col-span-12">
           <Card>
@@ -474,7 +474,7 @@ export default function DashboardPage() {
           </Card>
         </div>
         {/* 左侧：列表 */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className="lg:col-span-7 space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-headline font-bold text-primary tracking-tight">手动检查</h2>
@@ -837,7 +837,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 右侧：详情面板 */}
-        <div className="lg:col-span-4">
+        <div className="lg:col-span-5">
           <div className="lg:sticky lg:top-24 space-y-6">
             {selectedFile ? (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 sm:slide-in-from-right-4 duration-300">
