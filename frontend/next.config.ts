@@ -1,9 +1,12 @@
 import type {NextConfig} from 'next';
 
 const backendOrigin = process.env.BACKEND_ORIGIN || 'http://localhost:3001';
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api-aiwater.cszj.wang/api';
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: 'export',
+  distDir: 'out',
   turbopack: {
     root: __dirname,
   },
@@ -16,21 +19,8 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${backendOrigin}/api/:path*`,
-      },
-      {
-        source: '/uploads/:path*',
-        destination: `${backendOrigin}/uploads/:path*`,
-      },
-      {
-        source: '/tiles/:path*',
-        destination: `${backendOrigin}/tiles/:path*`,
-      },
-    ];
+  env: {
+    NEXT_PUBLIC_API_BASE_URL: apiBaseUrl,
   },
 };
 
